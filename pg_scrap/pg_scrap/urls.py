@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from app_scrap.views import marketplace_list
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', marketplace_list, name='marketplace_list'),
 ]

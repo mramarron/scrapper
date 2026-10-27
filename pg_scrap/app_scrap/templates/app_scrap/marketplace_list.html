@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marketplace and business directory</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; }
+    li { border-bottom: 1px solid #ddd; padding: 1rem 0; }
+    section { margin-top: 3rem; }
+    h1 { margin-bottom: 0.25rem; }
+    .muted { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Scraped listings</h1>
+
+  <section>
+    <h2>Marketplace listings</h2>
+    <p class="muted">Latest saved Tisitano listings</p>
+    {% if listings %}
+      <ul>
+        {% for listing in listings %}
+          <li>
+            <h3><a href="{{ listing.listing_url }}" target="_blank" rel="noopener noreferrer">{{ listing.listing_title }}</a></h3>
+            {% if listing.item_price %}<p>Price: {{ listing.item_price }}</p>{% endif %}
+            {% if listing.location_district %}<p>Location: {{ listing.location_district }}</p>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No marketplace listings yet. Run <code>python manage.py scrape_marketplace --pages 1</code> to fetch listings.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Mthandizi businesses</h2>
+    <p class="muted">Latest businesses in the Lilongwe directory</p>
+    {% if businesses %}
+      <ul>
+        {% for business in businesses %}
+          <li>
+            <h3><a href="{{ business.profile_url }}" target="_blank" rel="noopener noreferrer">{{ business.business_name }}</a></h3>
+            {% if business.category %}<p>Category: {{ business.category }}</p>{% endif %}
+            {% if business.location %}<p>Location: {{ business.location }}</p>{% endif %}
+            {% if business.phone_number %}<p>Phone: {{ business.phone_number }}</p>{% endif %}
+            {% if business.email %}<p>Email: <a href="mailto:{{ business.email }}">{{ business.email }}</a></p>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No Mthandizi businesses yet. Run <code>python manage.py scrape_mthandizi</code> to fetch businesses.</p>
+    {% endif %}
+  </section>
+</body>
+</html>
