@@ -1,47 +1,51 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
-
-  <main>
-    <TheWelcome />
-  </main>
+  <div class="app-container">
+    <h1>Django + Vue Decoupled App</h1>
+    
+    <div v-if="loading" class="status">Fetching data from backend...</div>
+    <div v-else-if="error" class="status error">{{ error }}</div>
+    
+    <ul v-else class="item-list">
+      <li v-for="item in items" :key="item.id">
+        <strong>{{ item.title }}</strong>: {{ item.description }}
+      </li>
+    </ul>
+  </div>
 </template>
 
+<script setup>
+import { ref, onMounted } from 'vue';
+import api from './services/api';
+
+const items = ref([]);
+const loading = ref(true);
+const error = ref(null);
+
+onMounted(async () => {
+  try {
+    // Hits http://127.0.0 behind the scenes
+    const response = await api.get('/items/'); 
+    items.value = response.data;
+  } catch (err) {
+    error.value = 'Failed to load data from Django backend.';
+    console.error(err);
+  } finally {
+    loading.value = false;
+  }
+});
+</script>
+
 <style scoped>
-header {
-  line-height: 1.5;
+.app-container {
+  font-family: Arial, sans-serif;
+  max-width: 600px;
+  margin: 40px auto;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #f9f9f9;
 }
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-}
+.status { color: #666; }
+.error { color: #d9534f; }
+.item-list { list-style-type: none; padding: 0; }
+.item-list li { padding: 10px; margin-bottom: 8px; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 </style>
