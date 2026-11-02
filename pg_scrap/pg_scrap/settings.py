@@ -26,10 +26,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'app_scrap.apps.AppScrapConfig',
+    'app_scrap',
     'corsheaders',
     'rest_framework',
-    'app_scrap',
 ]
 
 MIDDLEWARE = [

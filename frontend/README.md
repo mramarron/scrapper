@@ -29,6 +29,26 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 npm install
 ```
 
+## Django API
+
+The Vue app loads marketplace listings from `/api/marketplace-listings/` and
+Mthandizi businesses from `/api/businesses/` through Axios. During development,
+Vite proxies `/api` requests to Django at `http://127.0.0.1:8000`.
+
+Run Django from the repository root in one terminal:
+
+```powershell
+cd pg_scrap
+..\.env\Scripts\python.exe manage.py runserver
+```
+
+Run the frontend from the repository root in another terminal:
+
+```powershell
+cd frontend
+npm run dev
+```
+
 ### Compile and Hot-Reload for Development
 
 ```sh

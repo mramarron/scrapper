@@ -40,6 +40,49 @@ class MarketplaceListViewTests(TestCase):
     self.assertContains(response, business.profile_url)
 
 
+class DirectoryApiTests(TestCase):
+  def test_lists_marketplace_listings_and_businesses(self):
+    listing = ScrapedLead.objects.create(
+        vendor_name="Classified Vendor",
+        listing_title="Used bicycle",
+        item_price="125000.00",
+        location_district="Lilongwe",
+        listing_url="https://example.com/listings/bicycle",
+    )
+    business = MthandiziBusinessLead.objects.create(
+        business_name="Lilongwe Hardware",
+        location="Area 3, Lilongwe",
+        phone_number="+265 999 123 456",
+        email="contact@lilongwehardware.mw",
+        profile_url="https://mthandizi.com/partners/lilongwe-hardware",
+    )
+
+    listings_response = self.client.get("/api/marketplace-listings/")
+    businesses_response = self.client.get("/api/businesses/")
+
+    self.assertEqual(listings_response.status_code, 200)
+    self.assertEqual(businesses_response.status_code, 200)
+    self.assertEqual(
+        listings_response.json()[0]["listing_title"], listing.listing_title
+    )
+    self.assertEqual(
+        listings_response.json()[0]["item_price"], "125000.00"
+    )
+    self.assertEqual(
+        businesses_response.json()[0]["business_name"], business.business_name
+    )
+    self.assertEqual(
+        businesses_response.json()[0]["email"], business.email
+    )
+
+  def test_directory_endpoints_are_read_only(self):
+    listing_response = self.client.post("/api/marketplace-listings/", {})
+    business_response = self.client.post("/api/businesses/", {})
+
+    self.assertEqual(listing_response.status_code, 405)
+    self.assertEqual(business_response.status_code, 405)
+
+
 class MarketplaceScraperServiceTests(TestCase):
   def test_parses_minimal_listing_data_from_page_props(self):
     html = (
