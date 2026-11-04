@@ -1,72 +1,120 @@
 <template>
-  <main class="dashboard">
-    <header class="page-header">
+  <main class="mx-auto w-full max-w-6xl px-5 py-8 sm:px-7 sm:py-12">
+    <header class="mb-9 flex flex-col items-start justify-between gap-5 sm:mb-12 sm:flex-row sm:items-center">
       <div>
-        <p class="eyebrow">MALAWI BUSINESS DIRECTORY</p>
-        <h1>Local marketplace</h1>
-        <p class="intro">Recent listings and businesses collected from local directories.</p>
+        <p class="mb-2 text-xs font-bold tracking-[0.12em] text-emerald-700">MALAWI BUSINESS DIRECTORY</p>
+        <h1 class="mb-2 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">Local marketplace</h1>
+        <p class="mb-0 text-slate-500">Recent listings and businesses collected from local directories.</p>
       </div>
-      <button class="refresh-button" type="button" :disabled="loading" @click="loadData">
+      <button
+        class="shrink-0 rounded-lg bg-emerald-800 px-4 py-3 font-semibold text-white transition-colors hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-wait disabled:opacity-65"
+        type="button"
+        :disabled="loading"
+        @click="loadData"
+      >
         {{ loading ? 'Loading…' : 'Refresh data' }}
       </button>
     </header>
 
-    <p v-if="error" class="notice error-notice" role="alert">{{ error }}</p>
-    <p v-else-if="loading" class="notice" role="status">Loading marketplace data…</p>
+    <p v-if="error" class="rounded-xl border border-red-200 bg-red-50 p-5 text-red-900" role="alert">{{ error }}</p>
+    <p v-else-if="loading" class="rounded-xl border border-slate-200 bg-white p-5 text-slate-500" role="status">
+      Loading marketplace data…
+    </p>
 
-    <div v-else class="content">
-      <section class="data-section" aria-labelledby="listings-heading">
-        <div class="section-heading">
+    <div v-else>
+      <section class="mb-12" aria-labelledby="listings-heading">
+        <div class="mb-5 flex items-center justify-between gap-5">
           <div>
-            <p class="eyebrow">CLASSIFIEDS</p>
-            <h2 id="listings-heading">Marketplace listings</h2>
+            <p class="mb-1 text-xs font-bold tracking-[0.12em] text-emerald-700">CLASSIFIEDS</p>
+            <h2 id="listings-heading" class="mb-0 text-2xl font-semibold tracking-tight text-slate-800">
+              Marketplace listings
+            </h2>
           </div>
-          <span class="count">{{ listings.length }}</span>
+          <span class="grid size-9 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-800">
+            {{ listings.length }}
+          </span>
         </div>
 
-        <p v-if="listings.length === 0" class="empty-state">No marketplace listings have been collected yet.</p>
-        <div v-else class="card-grid">
-          <article v-for="listing in listings" :key="listing.id" class="data-card">
-            <div class="card-topline">
-              <span v-if="listing.category" class="tag">{{ listing.category }}</span>
-              <span class="source">{{ listing.source_platform }}</span>
+        <p v-if="listings.length === 0" class="rounded-xl border border-slate-200 bg-white p-5 text-slate-500">
+          No marketplace listings have been collected yet.
+        </p>
+        <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-4">
+          <article
+            v-for="listing in listings"
+            :key="listing.id"
+            class="flex min-h-[210px] flex-col items-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div class="mb-4 flex w-full items-center justify-between gap-5">
+              <span v-if="listing.category" class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                {{ listing.category }}
+              </span>
+              <span class="text-xs text-slate-500">{{ listing.source_platform }}</span>
             </div>
-            <h3>{{ listing.listing_title }}</h3>
-            <p class="price">{{ formatPrice(listing.item_price) }}</p>
-            <p class="muted">{{ listing.vendor_name }}</p>
-            <p v-if="listing.location_district" class="muted">{{ listing.location_district }}</p>
-            <a class="card-link" :href="listing.listing_url" target="_blank" rel="noopener noreferrer">
+            <h3 class="mb-2 text-lg font-semibold text-slate-800">{{ listing.listing_title }}</h3>
+            <p class="mb-2 text-lg font-bold text-emerald-800">{{ formatPrice(listing.item_price) }}</p>
+            <p class="mb-1 text-sm text-slate-500">{{ listing.vendor_name }}</p>
+            <p v-if="listing.location_district" class="mb-1 text-sm text-slate-500">{{ listing.location_district }}</p>
+            <a
+              class="mt-auto pt-5 text-sm font-bold text-emerald-800 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              :href="listing.listing_url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               View listing <span aria-hidden="true">→</span>
             </a>
           </article>
         </div>
       </section>
 
-      <section class="data-section" aria-labelledby="businesses-heading">
-        <div class="section-heading">
+      <section aria-labelledby="businesses-heading">
+        <div class="mb-5 flex items-center justify-between gap-5">
           <div>
-            <p class="eyebrow">DIRECTORY</p>
-            <h2 id="businesses-heading">Mthandizi businesses</h2>
+            <p class="mb-1 text-xs font-bold tracking-[0.12em] text-emerald-700">DIRECTORY</p>
+            <h2 id="businesses-heading" class="mb-0 text-2xl font-semibold tracking-tight text-slate-800">
+              Mthandizi businesses
+            </h2>
           </div>
-          <span class="count">{{ businesses.length }}</span>
+          <span class="grid size-9 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-800">
+            {{ businesses.length }}
+          </span>
         </div>
 
-        <p v-if="businesses.length === 0" class="empty-state">No businesses have been collected yet.</p>
-        <div v-else class="card-grid">
-          <article v-for="business in businesses" :key="business.id" class="data-card">
-            <div class="card-topline">
-              <span v-if="business.category" class="tag">{{ business.category }}</span>
-              <span v-else class="tag">Business</span>
+        <p v-if="businesses.length === 0" class="rounded-xl border border-slate-200 bg-white p-5 text-slate-500">
+          No businesses have been collected yet.
+        </p>
+        <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-4">
+          <article
+            v-for="business in businesses"
+            :key="business.id"
+            class="flex min-h-[210px] flex-col items-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div class="mb-4 flex w-full items-center justify-between gap-5">
+              <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                {{ business.category || 'Business' }}
+              </span>
             </div>
-            <h3>{{ business.business_name }}</h3>
-            <p v-if="business.location" class="muted">{{ business.location }}</p>
-            <a v-if="business.phone_number" class="contact-link" :href="`tel:${business.phone_number}`">
+            <h3 class="mb-2 text-lg font-semibold text-slate-800">{{ business.business_name }}</h3>
+            <p v-if="business.location" class="mb-1 text-sm text-slate-500">{{ business.location }}</p>
+            <a
+              v-if="business.phone_number"
+              class="mt-1 break-all text-sm text-emerald-800 hover:underline"
+              :href="`tel:${business.phone_number}`"
+            >
               {{ business.phone_number }}
             </a>
-            <a v-if="business.email" class="contact-link" :href="`mailto:${business.email}`">
+            <a
+              v-if="business.email"
+              class="mt-1 break-all text-sm text-emerald-800 hover:underline"
+              :href="`mailto:${business.email}`"
+            >
               {{ business.email }}
             </a>
-            <a class="card-link" :href="business.profile_url" target="_blank" rel="noopener noreferrer">
+            <a
+              class="mt-auto pt-5 text-sm font-bold text-emerald-800 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              :href="business.profile_url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               View business <span aria-hidden="true">→</span>
             </a>
           </article>
@@ -112,207 +160,3 @@ function formatPrice(price: string | null): string {
 
 onMounted(loadData)
 </script>
-
-<style scoped>
-.dashboard {
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  padding: 48px 28px 72px;
-}
-
-.page-header,
-.section-heading,
-.card-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.page-header {
-  margin-bottom: 48px;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: #43856b;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-h1,
-h2,
-h3,
-p {
-  margin-top: 0;
-}
-
-h1 {
-  margin-bottom: 8px;
-  color: #182b25;
-  font-size: clamp(2rem, 5vw, 3rem);
-  letter-spacing: -0.045em;
-}
-
-.intro,
-.muted,
-.source {
-  color: #6b7771;
-}
-
-.intro {
-  margin-bottom: 0;
-}
-
-.refresh-button {
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 8px;
-  padding: 11px 16px;
-  color: #fff;
-  background: #256c50;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.refresh-button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.data-section + .data-section {
-  margin-top: 48px;
-}
-
-.section-heading {
-  margin-bottom: 18px;
-}
-
-.section-heading .eyebrow {
-  margin-bottom: 3px;
-}
-
-h2 {
-  margin-bottom: 0;
-  color: #20352d;
-  font-size: 1.5rem;
-  letter-spacing: -0.025em;
-}
-
-.count {
-  display: grid;
-  min-width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 50%;
-  color: #256c50;
-  background: #e7f2eb;
-  font-weight: 700;
-}
-
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 16px;
-}
-
-.data-card {
-  display: flex;
-  min-height: 210px;
-  flex-direction: column;
-  align-items: flex-start;
-  border: 1px solid #e3eae5;
-  border-radius: 12px;
-  padding: 20px;
-  background: #fff;
-  box-shadow: 0 4px 16px rgb(27 55 42 / 4%);
-}
-
-.card-topline {
-  width: 100%;
-  margin-bottom: 14px;
-}
-
-.tag {
-  border-radius: 20px;
-  padding: 4px 9px;
-  color: #286748;
-  background: #e7f2eb;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.source {
-  font-size: 0.75rem;
-}
-
-h3 {
-  margin-bottom: 8px;
-  color: #20352d;
-  font-size: 1.1rem;
-}
-
-.price {
-  margin-bottom: 8px;
-  color: #256c50;
-  font-size: 1.15rem;
-  font-weight: 700;
-}
-
-.muted {
-  margin-bottom: 5px;
-  font-size: 0.9rem;
-}
-
-.contact-link,
-.card-link {
-  color: #256c50;
-  overflow-wrap: anywhere;
-}
-
-.contact-link {
-  margin-top: 5px;
-  font-size: 0.9rem;
-}
-
-.card-link {
-  margin-top: auto;
-  padding-top: 18px;
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.card-link:hover {
-  text-decoration: underline;
-}
-
-.empty-state,
-.notice {
-  border: 1px solid #e3eae5;
-  border-radius: 10px;
-  padding: 18px;
-  color: #6b7771;
-  background: #fff;
-}
-
-.error-notice {
-  border-color: #e8c4bd;
-  color: #8b3022;
-  background: #fff8f6;
-}
-
-@media (max-width: 600px) {
-  .dashboard {
-    padding: 32px 18px 48px;
-  }
-
-  .page-header {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-bottom: 36px;
-  }
-}
-</style>
