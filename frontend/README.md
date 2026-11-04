@@ -40,9 +40,19 @@ The frontend uses lazy-loaded Vue Router pages:
 - `/overview` for directory statistics and visual summaries
 - `/marketplace` for marketplace listings
 - `/businesses` for local business records
+- `/settings` to run the Mthandizi business and featured-product scraper
 
 The root path redirects to `/overview`. Production hosting should serve
 `index.html` as the fallback for these frontend routes.
+
+The Mthandizi scraper is started with `POST /api/scrape-mthandizi/`. The
+frontend polls the returned run ID at `/api/scrape-mthandizi/<run-id>/` until
+the run completes or fails. Apply Django migrations before starting the API:
+
+```powershell
+cd pg_scrap
+..\.env\Scripts\python.exe manage.py migrate
+```
 
 Run Django from the repository root in one terminal:
 

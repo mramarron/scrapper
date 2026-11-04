@@ -37,4 +37,34 @@ export interface BusinessLead {
   scraped_at: string;
 }
 
+export interface ScrapeRun {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  error_code?:
+    | "upstream_timeout"
+    | "upstream_unreachable"
+    | "upstream_rate_limited"
+    | "upstream_access_denied"
+    | "upstream_server_error"
+    | "upstream_request_failed"
+    | "directory_empty"
+    | "storage_error"
+    | "worker_unavailable"
+    | "unexpected_error"
+    | "";
+  progress: {
+    stage?: "starting" | "loading_directory" | "processing_businesses" | "completed";
+    message?: string;
+    current?: number;
+    total?: number;
+    businesses_processed?: number;
+    products_processed?: number;
+  };
+  output: string;
+  error: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 export default api;

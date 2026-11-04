@@ -1,5 +1,6 @@
 # scrapers/models.py
 from django.db import models
+from django.db.models import Q
 
 
 class ScrapedLead(models.Model):
@@ -47,3 +48,48 @@ class MthandiziBusinessLead(models.Model):
 
   def __str__(self):
     return f"{self.business_name} - {self.phone_number}"
+
+
+class MthandiziScrapeRun(models.Model):
+  class Status(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+  class ErrorCode(models.TextChoices):
+    UPSTREAM_TIMEOUT = "upstream_timeout", "Upstream timeout"
+    UPSTREAM_UNREACHABLE = "upstream_unreachable", "Upstream unreachable"
+    UPSTREAM_RATE_LIMITED = "upstream_rate_limited", "Upstream rate limited"
+    UPSTREAM_ACCESS_DENIED = "upstream_access_denied", "Upstream access denied"
+    UPSTREAM_SERVER_ERROR = "upstream_server_error", "Upstream server error"
+    UPSTREAM_REQUEST_FAILED = "upstream_request_failed", "Upstream request failed"
+    DIRECTORY_EMPTY = "directory_empty", "Directory empty"
+    STORAGE_ERROR = "storage_error", "Storage error"
+    WORKER_UNAVAILABLE = "worker_unavailable", "Worker unavailable"
+    UNEXPECTED_ERROR = "unexpected_error", "Unexpected error"
+
+  id = models.UUIDField(primary_key=True, editable=False)
+  status = models.CharField(
+      max_length=20,
+      choices=Status.choices,
+      default=Status.QUEUED,
+  )
+  is_active = models.BooleanField(default=True)
+  progress = models.JSONField(default=dict, blank=True)
+  error_code = models.CharField(max_length=40, blank=True)
+  output = models.TextField(blank=True)
+  error = models.TextField(blank=True)
+  created_at = models.DateTimeField(auto_now_add=True)
+  started_at = models.DateTimeField(blank=True, null=True)
+  completed_at = models.DateTimeField(blank=True, null=True)
+
+  class Meta:
+    ordering = ("-created_at",)
+    constraints = [
+        models.UniqueConstraint(
+            fields=("is_active",),
+            condition=Q(is_active=True),
+            name="one_active_mthandizi_scrape",
+        ),
+    ]

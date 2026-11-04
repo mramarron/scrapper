@@ -1,12 +1,19 @@
 import json
+import uuid
 from decimal import Decimal
 
+import requests
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from unittest.mock import patch
 
-from .models import MthandiziBusinessLead, ScrapedLead
-from .services import MarketplaceScraperService, MthandiziScraperService
+from .models import MthandiziBusinessLead, MthandiziScrapeRun, ScrapedLead
+from .services import (
+    MarketplaceScraperService,
+    MthandiziDirectoryEmptyError,
+    MthandiziScraperService,
+)
 
 
 class MarketplaceListViewTests(TestCase):
@@ -175,7 +182,10 @@ class MthandiziScraperServiceTests(TestCase):
     ]
 
     service = MthandiziScraperService()
-    first_result = service.scrape_directory()
+    progress_updates = []
+    first_result = service.scrape_directory(progress_updates.append)
+    self.assertEqual(mock_get.call_args_list[0].kwargs["timeout"], 60)
+    self.assertEqual(mock_get.call_args_list[1].kwargs["timeout"], 60)
     second_result = service.scrape_directory()
 
     business = MthandiziBusinessLead.objects.get(
@@ -203,3 +213,184 @@ class MthandiziScraperServiceTests(TestCase):
     self.assertEqual(product.item_price, Decimal("12500"))
     self.assertEqual(product.location_district, "Lilongwe")
     self.assertEqual(product.category, "Retail")
+    self.assertEqual(progress_updates[0]["stage"], "loading_directory")
+    self.assertEqual(progress_updates[1]["stage"], "processing_businesses")
+    self.assertEqual(progress_updates[-1]["businesses_processed"], 1)
+    self.assertEqual(progress_updates[-1]["products_processed"], 1)
+
+
+class MthandiziScrapeEndpointTests(TestCase):
+  def test_scrape_errors_map_to_stable_aliases(self):
+    from .views import _describe_scrape_error
+
+    rate_limited_response = requests.Response()
+    rate_limited_response.status_code = 429
+    rate_limited_error = requests.HTTPError(
+        response=rate_limited_response
+    )
+
+    self.assertEqual(
+        _describe_scrape_error(MthandiziDirectoryEmptyError())[0],
+        MthandiziScrapeRun.ErrorCode.DIRECTORY_EMPTY,
+    )
+    self.assertEqual(
+        _describe_scrape_error(rate_limited_error)[0],
+        MthandiziScrapeRun.ErrorCode.UPSTREAM_RATE_LIMITED,
+    )
+
+  @patch("app_scrap.views.scrape_executor.submit")
+  def test_post_starts_scrape_and_returns_run_status(self, submit):
+    response = self.client.post(reverse("mthandizi-scrape"))
+
+    self.assertEqual(response.status_code, 202)
+    self.assertEqual(response.json()["status"], "queued")
+    self.assertTrue(
+        MthandiziScrapeRun.objects.get(pk=response.json()["id"]).is_active
+    )
+    submit.assert_called_once()
+
+  @patch("app_scrap.views.scrape_executor.submit")
+  def test_post_returns_existing_run_when_scrape_is_active(self, submit):
+    active_run = MthandiziScrapeRun.objects.create(id=uuid.uuid4())
+
+    response = self.client.post(reverse("mthandizi-scrape"))
+
+    self.assertEqual(response.status_code, 202)
+    self.assertEqual(response.json()["id"], str(active_run.id))
+    self.assertEqual(MthandiziScrapeRun.objects.count(), 1)
+    submit.assert_not_called()
+
+  def test_get_returns_scrape_run_status(self):
+    run = MthandiziScrapeRun.objects.create(
+        id=uuid.uuid4(),
+        status=MthandiziScrapeRun.Status.RUNNING,
+        progress={
+            "stage": "processing_businesses",
+            "message": "Processing Example Business",
+            "current": 1,
+            "total": 3,
+        },
+    )
+
+    response = self.client.get(
+        reverse("mthandizi-scrape-run", kwargs={"run_id": run.id})
+    )
+
+    self.assertEqual(response.status_code, 200)
+    self.assertEqual(response.json()["id"], str(run.id))
+    self.assertEqual(response.json()["status"], "running")
+    self.assertEqual(response.json()["progress"], run.progress)
+    self.assertEqual(response.json()["error_code"], "")
+
+  @patch("app_scrap.views.call_command")
+  def test_worker_records_successful_command_output(self, call_command_mock):
+    call_command_mock.side_effect = (
+        lambda name, stdout, stderr, run_id: stdout.write("Scraper finished.")
+    )
+    run = MthandiziScrapeRun.objects.create(id=uuid.uuid4())
+
+    from .views import _execute_mthandizi_scrape
+
+    _execute_mthandizi_scrape(run.id)
+    run.refresh_from_db()
+
+    self.assertEqual(run.status, MthandiziScrapeRun.Status.COMPLETED)
+    self.assertFalse(run.is_active)
+    self.assertIsNotNone(run.started_at)
+    self.assertIsNotNone(run.completed_at)
+    self.assertEqual(run.output, "Scraper finished.")
+    self.assertEqual(run.progress["stage"], "completed")
+    self.assertEqual(run.error_code, "")
+    self.assertIn("run_id", call_command_mock.call_args.kwargs)
+
+  @patch(
+      "app_scrap.management.commands.scrape_mthandizi."
+      "MthandiziScraperService.scrape_directory"
+  )
+  def test_management_command_persists_service_progress(self, scrape_directory):
+    def report_progress(progress_callback):
+      progress_callback({
+          "stage": "processing_businesses",
+          "message": "Processing Example Business",
+          "current": 1,
+          "total": 1,
+          "businesses_processed": 0,
+          "products_processed": 0,
+      })
+      return 1, 1, 0, 0
+
+    scrape_directory.side_effect = report_progress
+    run = MthandiziScrapeRun.objects.create(id=uuid.uuid4())
+
+    call_command("scrape_mthandizi", run_id=str(run.id))
+    run.refresh_from_db()
+
+    self.assertEqual(
+        run.progress["message"],
+        "Processing Example Business",
+    )
+
+  @patch("app_scrap.views.call_command", side_effect=RuntimeError("raw secret"))
+  def test_worker_records_failed_command(self, call_command_mock):
+    run = MthandiziScrapeRun.objects.create(id=uuid.uuid4())
+
+    from .views import _execute_mthandizi_scrape
+
+    with self.assertLogs("app_scrap.views", level="ERROR"):
+      _execute_mthandizi_scrape(run.id)
+    run.refresh_from_db()
+
+    self.assertEqual(run.status, MthandiziScrapeRun.Status.FAILED)
+    self.assertFalse(run.is_active)
+    self.assertEqual(
+        run.error_code,
+        MthandiziScrapeRun.ErrorCode.UNEXPECTED_ERROR,
+    )
+    self.assertEqual(
+        run.error,
+        "An unexpected error interrupted the scrape. Please try again later.",
+    )
+    self.assertNotIn("raw secret", run.error)
+
+  @patch(
+      "app_scrap.views.call_command",
+      side_effect=requests.Timeout("request timed out"),
+  )
+  def test_worker_maps_upstream_timeout_to_safe_error_alias(
+      self, call_command_mock
+  ):
+    run = MthandiziScrapeRun.objects.create(id=uuid.uuid4())
+
+    from .views import _execute_mthandizi_scrape
+
+    with self.assertLogs("app_scrap.views", level="ERROR"):
+      _execute_mthandizi_scrape(run.id)
+    run.refresh_from_db()
+
+    self.assertEqual(
+        run.error_code,
+        MthandiziScrapeRun.ErrorCode.UPSTREAM_TIMEOUT,
+    )
+    self.assertEqual(
+        run.error,
+        "Mthandizi took too long to respond. Please try again shortly.",
+    )
+
+  def test_start_failure_includes_worker_error_alias(self):
+    with self.assertLogs("app_scrap.views", level="ERROR"):
+      with patch(
+          "app_scrap.views.scrape_executor.submit",
+          side_effect=RuntimeError("executor stopped"),
+      ):
+        response = self.client.post(reverse("mthandizi-scrape"))
+
+    run = MthandiziScrapeRun.objects.get(pk=response.json()["id"])
+    self.assertEqual(response.status_code, 503)
+    self.assertEqual(
+        response.json()["error_code"],
+        MthandiziScrapeRun.ErrorCode.WORKER_UNAVAILABLE,
+    )
+    self.assertEqual(
+        run.error_code,
+        MthandiziScrapeRun.ErrorCode.WORKER_UNAVAILABLE,
+    )

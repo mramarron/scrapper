@@ -699,6 +699,253 @@ p {
   height: 6px;
 }
 
+.settings-card {
+  max-width: 760px;
+  border: 1px solid #e9ede9;
+  border-radius: 10px;
+  background: #fff;
+  padding: 22px;
+}
+
+.settings-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: #edf5f0;
+  color: #1d684d;
+}
+
+.settings-icon svg {
+  width: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.settings-card-heading h2 {
+  margin: 0;
+  color: #344239;
+  font-family: Manrope, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-description {
+  max-width: 580px;
+  margin: 18px 0;
+  color: #78837c;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.scrape-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  border: 1px solid #edf0ed;
+  border-radius: 8px;
+  background: #fafbfa;
+  color: #718078;
+  font-size: 10px;
+  padding: 11px 12px;
+}
+
+.scrape-status-completed {
+  border-color: #dcece1;
+  background: #f3f8f4;
+  color: #367553;
+}
+
+.scrape-status-failed {
+  border-color: #f0d7d2;
+  background: #fff7f5;
+  color: #8b443b;
+}
+
+.scrape-status .status-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.scrape-status .status-failure {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #f7e1dc;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.scrape-status-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.scrape-status-copy strong {
+  font-size: 10px;
+}
+
+.scrape-status-copy > span {
+  color: #89938e;
+  font-size: 9px;
+}
+
+.scrape-progress {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scrape-progress-step {
+  position: relative;
+  display: flex;
+  min-height: 36px;
+  align-items: flex-start;
+  gap: 10px;
+  color: #a0a9a3;
+  font-size: 10px;
+}
+
+.scrape-progress-step:not(:last-child)::before {
+  position: absolute;
+  top: 17px;
+  bottom: 0;
+  left: 7px;
+  width: 1px;
+  background: #e9ede9;
+  content: '';
+}
+
+.scrape-progress-step.is-complete {
+  color: #367553;
+}
+
+.scrape-progress-step.is-active {
+  color: #344239;
+  font-weight: 600;
+}
+
+.scrape-progress-step.is-failed {
+  color: #8b443b;
+}
+
+.scrape-progress-count {
+  margin: 0 0 0 25px;
+  color: #89938e;
+  font-size: 9px;
+}
+
+.scrape-progress-indicator {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.scrape-progress-indicator > svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: #4a9668;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.progress-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid #dce8df;
+  border-top-color: #39815a;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.progress-pending {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #cbd3cd;
+  border-radius: 50%;
+}
+
+.progress-failure {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f7e1dc;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scrape-status-completed .scrape-status-copy > span {
+  color: #6d947a;
+}
+
+.scrape-status-failed .scrape-status-copy > span {
+  color: #a56d64;
+}
+
+.scrape-error {
+  display: grid;
+  gap: 3px;
+  margin-top: 9px;
+  color: #8b443b;
+  font-size: 10px;
+}
+
+.scrape-error strong {
+  font-size: 10px;
+}
+
+.scrape-error span {
+  line-height: 1.5;
+}
+
+.scrape-output {
+  overflow: auto;
+  max-height: 180px;
+  margin: 12px 0 0;
+  border: 1px solid #edf0ed;
+  border-radius: 7px;
+  background: #fafbfa;
+  color: #65736a;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 9px;
+  line-height: 1.6;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
 .quick-links {
   border: 1px solid #e9ede9;
   border-radius: 10px;

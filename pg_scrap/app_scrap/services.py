@@ -12,6 +12,10 @@ import requests
 from .models import MthandiziBusinessLead, ScrapedLead
 
 
+class MthandiziDirectoryEmptyError(ValueError):
+  pass
+
+
 class MarketplaceScraperService:
 
   def __init__(self, base_url="https://tisitano.com/?country=Malawi"):
@@ -103,32 +107,65 @@ class MarketplaceScraperService:
 
 
 class MthandiziScraperService:
+  REQUEST_TIMEOUT_SECONDS = 60
 
   def __init__(self, base_url="https://mthandizi.com/businesses-in-lilongwe"):
     self.base_url = base_url
 
-  def scrape_directory(self):
+  def scrape_directory(self, progress_callback=None):
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )
     }
-    response = requests.get(self.base_url, headers=headers, timeout=30)
+    if progress_callback:
+      progress_callback({
+          "stage": "loading_directory",
+          "message": "Loading the Mthandizi business directory",
+      })
+    response = requests.get(
+        self.base_url,
+        headers=headers,
+        timeout=self.REQUEST_TIMEOUT_SECONDS,
+    )
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
     listings = soup.select('a[href*="/partners/"]')
     if not listings:
-      raise ValueError("Mthandizi directory contained no business profiles")
+      raise MthandiziDirectoryEmptyError(
+          "Mthandizi directory contained no business profiles"
+      )
 
+    business_cards = [
+        (card, card.select_one("h2, h3"))
+        for card in listings
+        if card.select_one("h2, h3") is not None
+    ]
     processed_count = 0
     created_count = 0
     processed_product_count = 0
     created_product_count = 0
-    for card in listings:
-      name_elem = card.select_one("h2, h3")
-      if name_elem is None:
-        continue
+    if progress_callback:
+      progress_callback({
+          "stage": "processing_businesses",
+          "message": "Processing business profiles and featured products",
+          "current": 0,
+          "total": len(business_cards),
+          "businesses_processed": 0,
+          "products_processed": 0,
+      })
+    for business_index, (card, name_elem) in enumerate(business_cards, start=1):
+      business_name = name_elem.get_text(strip=True)
+      if progress_callback:
+        progress_callback({
+            "stage": "processing_businesses",
+            "message": f"Processing {business_name}",
+            "current": business_index,
+            "total": len(business_cards),
+            "businesses_processed": processed_count,
+            "products_processed": processed_product_count,
+        })
 
       location_icon = card.select_one("svg.lucide-map-pin")
       location_elem = (
@@ -140,7 +177,7 @@ class MthandiziScraperService:
       profile_response = requests.get(
           profile_url,
           headers=headers,
-          timeout=30,
+          timeout=self.REQUEST_TIMEOUT_SECONDS,
       )
       profile_response.raise_for_status()
       profile_soup = BeautifulSoup(profile_response.text, "html.parser")
@@ -171,7 +208,6 @@ class MthandiziScraperService:
           if email_link
           else ""
       )
-      business_name = name_elem.get_text(strip=True)
       location = (
           location_elem.get_text(strip=True)
           if location_elem
@@ -207,6 +243,15 @@ class MthandiziScraperService:
         processed_product_count += 1
         if product_created:
           created_product_count += 1
+      if progress_callback:
+        progress_callback({
+            "stage": "processing_businesses",
+            "message": f"Processed {business_name}",
+            "current": business_index,
+            "total": len(business_cards),
+            "businesses_processed": processed_count,
+            "products_processed": processed_product_count,
+        })
 
     return (
         processed_count,
