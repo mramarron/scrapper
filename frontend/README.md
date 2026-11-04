@@ -35,6 +35,15 @@ The Vue app loads marketplace listings from `/api/marketplace-listings/` and
 Mthandizi businesses from `/api/businesses/` through Axios. During development,
 Vite proxies `/api` requests to Django at `http://127.0.0.1:8000`.
 
+The frontend uses lazy-loaded Vue Router pages:
+
+- `/overview` for directory statistics and visual summaries
+- `/marketplace` for marketplace listings
+- `/businesses` for local business records
+
+The root path redirects to `/overview`. Production hosting should serve
+`index.html` as the fallback for these frontend routes.
+
 Run Django from the repository root in one terminal:
 
 ```powershell

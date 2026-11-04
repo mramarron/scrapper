@@ -1,10 +1,10 @@
 <template>
-  <div id="overview">
+  <div>
     <section class="page-heading" aria-labelledby="page-title">
       <div>
         <p class="eyebrow"><span class="eyebrow-line"></span> MARKET INTELLIGENCE</p>
         <h1 id="page-title">Your directory, <span>at a glance.</span></h1>
-        <p class="page-description">Explore the latest marketplace listings and local businesses in Malawi.</p>
+        <p class="page-description">A clear view of the latest marketplace and local business data.</p>
       </div>
       <button class="button button-primary refresh-button" type="button" :disabled="loading" @click="loadData">
         <svg :class="{ 'is-spinning': loading }" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-3L4 10m0 0V5m0 5h5m-5 2a8 8 0 0 0 14.7 3L20 14m0 0v5m0-5h-5" /></svg>
@@ -41,123 +41,175 @@
       </article>
     </section>
 
-    <section class="directory-panel" aria-label="Directory records">
-      <div class="panel-toolbar">
-        <div class="panel-tabs" aria-label="Directory sections">
-          <a class="panel-tab" :class="{ 'is-selected': activeDirectory === '#listings' }" href="#listings" :aria-current="activeDirectory === '#listings' ? 'page' : undefined">Marketplace <span>{{ listings.length }}</span></a>
-          <a class="panel-tab" :class="{ 'is-selected': activeDirectory === '#businesses' }" href="#businesses" :aria-current="activeDirectory === '#businesses' ? 'page' : undefined">Businesses <span>{{ businesses.length }}</span></a>
+    <section class="overview-grid" aria-label="Directory analytics">
+      <article class="analytics-card activity-card">
+        <div class="analytics-heading">
+          <div>
+            <p class="section-kicker">COLLECTION TRENDS</p>
+            <h2>Records collected <span class="chart-period">Last 14 days</span></h2>
+          </div>
+          <span class="chart-legend"><span></span> Records</span>
         </div>
-        <label class="search-field">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
-          <span class="sr-only">Search listings and businesses</span>
-          <input v-model="searchQuery" type="search" placeholder="Search directory..." />
-        </label>
+        <p v-if="loading && !hasLoaded" class="chart-message" role="status">Loading collection activity…</p>
+        <p v-else-if="error && !hasLoaded" class="chart-message">Activity is unavailable until the directory connection is restored.</p>
+        <div v-else-if="!hasChartData" class="chart-message">No recent collection activity to display.</div>
+        <ChartContainer
+          v-else
+          :config="activityChartConfig"
+          class="activity-chart-canvas"
+          role="img"
+          :aria-label="activityChartLabel"
+        >
+          <VisXYContainer :data="activity" :margin="{ top: 16, right: 6, bottom: 22, left: 6 }">
+            <VisGroupedBar
+              :x="activityX"
+              :y="activityY"
+              :color="[activityChartConfig.count.color]"
+              :bar-padding="0.35"
+              :rounded-corners="4"
+            />
+            <VisAxis
+              type="x"
+              :x="activityX"
+              :tick-values="activity.map((day) => day.timestamp)"
+              :tick-format="activityTickFormat"
+              :tick-line="false"
+              :domain-line="false"
+              :grid-line="false"
+            />
+            <VisAxis
+              type="y"
+              :tick-format="() => ''"
+              :tick-line="false"
+              :domain-line="false"
+              :grid-line="true"
+            />
+            <ChartTooltip />
+            <ChartCrosshair
+              :x="activityX"
+              :y="activityY"
+              :template="activityTooltipTemplate"
+              :color="[activityChartConfig.count.color]"
+            />
+          </VisXYContainer>
+        </ChartContainer>
+        <p class="chart-footnote">Based on the latest records returned by each directory.</p>
+      </article>
+
+      <article class="analytics-card source-card">
+        <div class="analytics-heading">
+          <div>
+            <p class="section-kicker">DATA SOURCES</p>
+            <h2>Directory mix</h2>
+          </div>
+        </div>
+        <p v-if="loading && !hasLoaded" class="chart-message source-chart-message" role="status">Loading directory mix…</p>
+        <p v-else-if="error && !hasLoaded" class="chart-message source-chart-message">Directory mix is unavailable until the connection is restored.</p>
+        <p v-else-if="!hasSourceData" class="chart-message source-chart-message">No source records to display.</p>
+        <div v-else class="source-chart-content">
+          <ChartContainer
+            :config="sourceChartConfig"
+            class="source-chart-canvas"
+            role="img"
+            :aria-label="sourceChartLabel"
+          >
+            <VisSingleContainer :data="sourceChartData" :height="136">
+              <VisDonut
+                :value="sourceValue"
+                :color="sourceColor"
+                :central-label="String(listings.length + businesses.length)"
+                central-sub-label="records"
+                :arc-width="20"
+                :show-empty-segments="true"
+              />
+            </VisSingleContainer>
+          </ChartContainer>
+          <div class="source-breakdown" aria-label="Records by source">
+            <div v-for="source in sourceChartData" :key="source.key" class="source-row-heading">
+              <span><i class="source-dot" :style="{ backgroundColor: source.color }"></i>{{ source.label }}</span>
+              <strong>{{ source.count }}</strong>
+            </div>
+          </div>
+        </div>
+        <p class="chart-footnote">Latest {{ listings.length + businesses.length }} records across both sources.</p>
+      </article>
+    </section>
+
+    <section class="quick-links" aria-labelledby="explore-title">
+      <div class="quick-links-heading">
+        <div>
+          <p class="section-kicker">EXPLORE YOUR DATA</p>
+          <h2 id="explore-title">Go to a directory</h2>
+        </div>
       </div>
-
-      <section id="listings" class="directory-section" aria-labelledby="listings-title">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">FROM THE MARKETPLACE</p>
-            <h2 id="listings-title">Recent listings <span class="section-count">{{ filteredListings.length }}</span></h2>
-          </div>
-          <span class="source-label"><span class="source-mark">M</span> Marketplace</span>
-        </div>
-
-        <div v-if="loading && !hasLoaded" class="loading-state" role="status">
-          <span class="spinner"></span> Loading marketplace listings…
-        </div>
-        <div v-else-if="error && !hasLoaded" class="empty-state">Listings are unavailable until the directory connection is restored.</div>
-        <div v-else-if="filteredListings.length" class="record-list">
-          <article v-for="listing in filteredListings" :key="listing.id" class="record-row">
-            <span class="record-avatar listing-avatar" aria-hidden="true">{{ getInitials(listing.listing_title) }}</span>
-            <div class="record-main">
-              <div class="record-title-line">
-                <h3>{{ listing.listing_title }}</h3>
-                <span v-if="listing.category" class="category-pill">{{ listing.category }}</span>
-              </div>
-              <p>{{ listing.vendor_name || 'Independent seller' }}<span class="detail-separator">·</span>{{ listing.location_district || 'Malawi' }}</p>
-            </div>
-            <div class="record-price">{{ formatPrice(listing.item_price) }}</div>
-            <a class="record-link" :href="listing.listing_url" target="_blank" rel="noopener noreferrer" :aria-label="`View ${listing.listing_title} on ${listing.source_platform}`">
-              <span>{{ listing.source_platform || 'View listing' }}</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
-            </a>
-          </article>
-        </div>
-        <div v-else-if="searchQuery" class="empty-state">No listings match “{{ searchQuery }}”. Try another search.</div>
-        <div v-else class="empty-state">No marketplace listings have been collected yet.</div>
-      </section>
-
-      <section id="businesses" class="directory-section business-section" aria-labelledby="businesses-title">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">LOCAL DIRECTORY</p>
-            <h2 id="businesses-title">Businesses to discover <span class="section-count">{{ filteredBusinesses.length }}</span></h2>
-          </div>
-          <span class="source-label"><span class="source-mark source-mark-business">B</span> Mthandizi</span>
-        </div>
-
-        <div v-if="loading && !hasLoaded" class="loading-state" role="status">
-          <span class="spinner"></span> Loading businesses…
-        </div>
-        <div v-else-if="error && !hasLoaded" class="empty-state">Businesses are unavailable until the directory connection is restored.</div>
-        <div v-else-if="filteredBusinesses.length" class="business-grid">
-          <article v-for="business in filteredBusinesses" :key="business.id" class="business-card">
-            <div class="business-card-top">
-              <span class="record-avatar business-avatar" aria-hidden="true">{{ getInitials(business.business_name) }}</span>
-              <span class="verified-badge"><span aria-hidden="true">✓</span> Listed</span>
-            </div>
-            <p class="business-category">{{ business.category || 'Local business' }}</p>
-            <h3>{{ business.business_name }}</h3>
-            <p class="business-location">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2" /></svg>
-              {{ business.location || 'Malawi' }}
-            </p>
-            <div class="business-card-footer">
-              <a v-if="business.phone_number" :href="`tel:${business.phone_number}`">{{ business.phone_number }}</a>
-              <span v-else class="no-contact">Contact details unavailable</span>
-              <a class="business-external" :href="business.profile_url" target="_blank" rel="noopener noreferrer" :aria-label="`View ${business.business_name} profile`">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
-              </a>
-            </div>
-          </article>
-        </div>
-        <div v-else-if="searchQuery" class="empty-state">No businesses match “{{ searchQuery }}”. Try another search.</div>
-        <div v-else class="empty-state">No businesses have been collected yet.</div>
-      </section>
+      <div class="quick-link-grid">
+        <RouterLink class="quick-link-card" to="/marketplace">
+          <span class="quick-link-icon icon-mint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h16l-1.5 13h-13L4 7.5ZM8 8V6a4 4 0 0 1 8 0v2" /></svg></span>
+          <span class="quick-link-copy"><strong>Marketplace listings</strong><small>Browse collected items and offers</small></span>
+          <span class="quick-link-count">{{ listings.length }}</span>
+          <span class="quick-link-arrow" aria-hidden="true">→</span>
+        </RouterLink>
+        <RouterLink class="quick-link-card" to="/businesses">
+          <span class="quick-link-icon icon-lilac"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17M5.5 20.5v-11l6.5-5 6.5 5v11M9 20.5v-5h6v5M9 11h.01M15 11h.01" /></svg></span>
+          <span class="quick-link-copy"><strong>Local businesses</strong><small>Discover businesses in the directory</small></span>
+          <span class="quick-link-count">{{ businesses.length }}</span>
+          <span class="quick-link-arrow" aria-hidden="true">→</span>
+        </RouterLink>
+      </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { VisAxis, VisDonut, VisGroupedBar, VisSingleContainer, VisXYContainer } from '@unovis/vue'
+import type { ChartConfig } from '@/components/ui/chart'
+import {
+  ChartContainer,
+  ChartCrosshair,
+  ChartTooltip,
+  ChartTooltipContent,
+  componentToString,
+} from '@/components/ui/chart'
 import api, { type BusinessLead, type ScrapedListing } from '../services/api'
+
+interface ActivityDay {
+  key: string
+  dateLabel: string
+  timestamp: number
+  count: number
+}
+
+interface SourceSlice {
+  key: 'marketplace' | 'businesses'
+  label: string
+  count: number
+  color: string
+}
+
+const activityChartConfig = {
+  count: {
+    label: 'Records',
+    color: '#56a176',
+  },
+} satisfies ChartConfig
+
+const sourceChartConfig = {
+  marketplace: {
+    label: 'Marketplace',
+    color: '#56a176',
+  },
+  businesses: {
+    label: 'Businesses',
+    color: '#9482bd',
+  },
+} satisfies ChartConfig
 
 const listings = ref<ScrapedListing[]>([])
 const businesses = ref<BusinessLead[]>([])
 const loading = ref(true)
 const hasLoaded = ref(false)
 const error = ref<string | null>(null)
-const searchQuery = ref('')
-const activeDirectory = ref('#listings')
-
-const normalizedQuery = computed(() => searchQuery.value.trim().toLocaleLowerCase())
-
-const filteredListings = computed(() => {
-  if (!normalizedQuery.value) return listings.value
-  return listings.value.filter((listing) =>
-    [listing.listing_title, listing.vendor_name, listing.phone_number, listing.category, listing.location_district, listing.source_platform]
-      .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery.value)),
-  )
-})
-
-const filteredBusinesses = computed(() => {
-  if (!normalizedQuery.value) return businesses.value
-  return businesses.value.filter((business) =>
-    [business.business_name, business.category, business.location, business.phone_number, business.email]
-      .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery.value)),
-  )
-})
 
 const latestUpdated = computed(() => {
   const timestamps = [
@@ -172,6 +224,75 @@ const latestUpdated = computed(() => {
   return new Intl.DateTimeFormat('en-MW', { day: 'numeric', month: 'short', year: 'numeric' }).format(latest)
 })
 
+const activity = computed<ActivityDay[]>(() => {
+  const today = new Date()
+  const days = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(today)
+    date.setHours(0, 0, 0, 0)
+    date.setDate(today.getDate() - (13 - index))
+    return {
+      key: dateKey(date),
+      dateLabel: new Intl.DateTimeFormat('en-MW', { day: 'numeric', month: 'short' }).format(date),
+      timestamp: date.getTime(),
+      count: 0,
+    }
+  })
+  const counts = new Map(days.map((day) => [day.key, day]))
+
+  for (const timestamp of [
+    ...listings.value.map((listing) => listing.scraped_at),
+    ...businesses.value.map((business) => business.scraped_at),
+  ]) {
+    const date = new Date(timestamp)
+    if (Number.isNaN(date.getTime())) continue
+    const day = counts.get(dateKey(date))
+    if (day) day.count += 1
+  }
+
+  return days
+})
+
+const hasChartData = computed(() => activity.value.some((day) => day.count > 0))
+const activityChartLabel = computed(() =>
+  `Records collected over the last fourteen days: ${activity.value.map((day) => `${day.dateLabel}, ${day.count}`).join('; ')}`,
+)
+const sourceChartData = computed<SourceSlice[]>(() => [
+  {
+    key: 'marketplace',
+    label: 'Marketplace',
+    count: listings.value.length,
+    color: sourceChartConfig.marketplace.color,
+  },
+  {
+    key: 'businesses',
+    label: 'Businesses',
+    count: businesses.value.length,
+    color: sourceChartConfig.businesses.color,
+  },
+])
+const hasSourceData = computed(() => sourceChartData.value.some((source) => source.count > 0))
+const sourceChartLabel = computed(() =>
+  `Directory mix: ${sourceChartData.value.map((source) => `${source.label}, ${source.count}`).join('; ')}`,
+)
+const activityTooltipTemplate = componentToString(activityChartConfig, ChartTooltipContent, {
+  labelFormatter: (timestamp) =>
+    new Intl.DateTimeFormat('en-MW', { day: 'numeric', month: 'short' }).format(
+      timestamp instanceof Date ? timestamp : new Date(timestamp),
+    ),
+})
+
+const activityX = (day: ActivityDay) => day.timestamp
+const activityY = (day: ActivityDay) => day.count
+const activityTickFormat = (timestamp: number) => String(new Date(timestamp).getDate())
+const sourceValue = (source: SourceSlice) => source.count
+const sourceColor = (source: SourceSlice) => source.color
+
+function dateKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 async function loadData() {
   loading.value = true
   error.value = null
@@ -185,40 +306,12 @@ async function loadData() {
     businesses.value = businessResponse.data
     hasLoaded.value = true
   } catch (cause) {
-    console.error('Failed to load directory data from Django.', cause)
+    console.error('Failed to load directory overview from Django.', cause)
     error.value = 'We could not load the latest directory data. Check your connection and try again.'
   } finally {
     loading.value = false
   }
 }
 
-function formatPrice(price: string | null): string {
-  if (!price) return 'Price not listed'
-  const amount = Number(price)
-  return Number.isFinite(amount) ? `MK ${amount.toLocaleString('en-MW')}` : price
-}
-
-function getInitials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toLocaleUpperCase()
-}
-
-function syncActiveDirectory() {
-  activeDirectory.value = window.location.hash === '#businesses' ? '#businesses' : '#listings'
-}
-
-onMounted(() => {
-  syncActiveDirectory()
-  window.addEventListener('hashchange', syncActiveDirectory)
-  loadData()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('hashchange', syncActiveDirectory)
-})
+onMounted(loadData)
 </script>
