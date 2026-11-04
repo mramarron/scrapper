@@ -58,7 +58,9 @@ export interface ScrapeRun {
     current?: number;
     total?: number;
     businesses_processed?: number;
+    businesses_added?: number;
     products_processed?: number;
+    products_added?: number;
   };
   output: string;
   error: string;

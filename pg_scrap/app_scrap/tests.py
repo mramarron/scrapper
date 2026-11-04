@@ -1,6 +1,8 @@
 import json
+import threading
 import uuid
 from decimal import Decimal
+from types import SimpleNamespace
 
 import requests
 from django.core.management import call_command
@@ -143,7 +145,52 @@ class MarketplaceScraperServiceTests(TestCase):
 
 class MthandiziScraperServiceTests(TestCase):
   @patch("app_scrap.services.requests.get")
-  def test_scrapes_and_updates_directory_businesses(self, mock_get):
+  def test_fetches_business_profiles_with_bounded_concurrency(self, mock_get):
+    directory_html = "".join(
+        f'<a href="/partners/business-{index}"><h3>Business {index}</h3></a>'
+        for index in range(4)
+    )
+    active_requests = 0
+    max_active_requests = 0
+    profile_request_count = 0
+    lock = threading.Lock()
+    first_pair_started = threading.Barrier(2)
+
+    def fake_get(url, **kwargs):
+      nonlocal active_requests, max_active_requests, profile_request_count
+      if url.endswith("/businesses-in-lilongwe"):
+        return SimpleNamespace(
+            text=directory_html,
+            raise_for_status=lambda: None,
+        )
+
+      with lock:
+        profile_request_count += 1
+        request_number = profile_request_count
+        active_requests += 1
+        max_active_requests = max(max_active_requests, active_requests)
+      try:
+        if request_number <= 2:
+          first_pair_started.wait(timeout=3)
+        return SimpleNamespace(
+            text="<main></main>",
+            raise_for_status=lambda: None,
+        )
+      finally:
+        with lock:
+          active_requests -= 1
+
+    mock_get.side_effect = fake_get
+    service = MthandiziScraperService()
+    service.PROFILE_FETCH_WORKERS = 2
+
+    result = service.scrape_directory()
+
+    self.assertEqual(result, (4, 4, 0, 0))
+    self.assertEqual(max_active_requests, 2)
+
+  @patch("app_scrap.services.requests.get")
+  def test_discovers_new_products_for_existing_businesses(self, mock_get):
     directory_response = mock_get.return_value
     directory_response.status_code = 200
     directory_response.text = """
@@ -154,6 +201,19 @@ class MthandiziScraperServiceTests(TestCase):
         </div>
       </a>
     """
+    existing_profile_response = type(
+        "Response",
+        (),
+        {
+            "status_code": 200,
+            "text": (
+                '<a href="https://wa.me/message/QSZPRR7EZHFVH1">WhatsApp</a>'
+                '<a href="tel:+265991234567">Call Business</a>'
+                '<a href="mailto:info@example.mw">Email</a>'
+            ),
+            "raise_for_status": lambda self: None,
+        },
+    )()
     profile_response = type(
         "Response",
         (),
@@ -176,6 +236,8 @@ class MthandiziScraperServiceTests(TestCase):
     )()
     mock_get.side_effect = [
         directory_response,
+        existing_profile_response,
+        directory_response,
         profile_response,
         directory_response,
         profile_response,
@@ -186,7 +248,8 @@ class MthandiziScraperServiceTests(TestCase):
     first_result = service.scrape_directory(progress_updates.append)
     self.assertEqual(mock_get.call_args_list[0].kwargs["timeout"], 60)
     self.assertEqual(mock_get.call_args_list[1].kwargs["timeout"], 60)
-    second_result = service.scrape_directory()
+    second_result = service.scrape_directory(progress_updates.append)
+    third_result = service.scrape_directory(progress_updates.append)
 
     business = MthandiziBusinessLead.objects.get(
         profile_url=(
@@ -199,8 +262,10 @@ class MthandiziScraperServiceTests(TestCase):
             "?ref=partner_profile"
         )
     )
-    self.assertEqual(first_result, (1, 1, 1, 1))
-    self.assertEqual(second_result, (1, 0, 1, 0))
+    self.assertEqual(first_result, (1, 1, 0, 0))
+    self.assertEqual(second_result, (1, 0, 1, 1))
+    self.assertEqual(third_result, (1, 0, 1, 0))
+    self.assertEqual(mock_get.call_count, 6)
     self.assertEqual(business.business_name, "Example Business")
     self.assertEqual(business.location, "Lilongwe")
     self.assertEqual(business.phone_number, "+265991234567")
@@ -216,7 +281,9 @@ class MthandiziScraperServiceTests(TestCase):
     self.assertEqual(progress_updates[0]["stage"], "loading_directory")
     self.assertEqual(progress_updates[1]["stage"], "processing_businesses")
     self.assertEqual(progress_updates[-1]["businesses_processed"], 1)
-    self.assertEqual(progress_updates[-1]["products_processed"], 1)
+    self.assertEqual(progress_updates[-5]["products_processed"], 1)
+    self.assertEqual(progress_updates[-5]["products_added"], 1)
+    self.assertIn("Processed Example Business", progress_updates[-1]["message"])
 
 
 class MthandiziScrapeEndpointTests(TestCase):

@@ -84,6 +84,9 @@
         <span v-if="run.progress.products_processed !== undefined">
           · {{ run.progress.products_processed }} products
         </span>
+        <span v-if="run.progress.products_added">
+          · {{ run.progress.products_added }} new
+        </span>
       </p>
 
       <div v-if="run?.status === 'failed'" class="scrape-error" role="alert">

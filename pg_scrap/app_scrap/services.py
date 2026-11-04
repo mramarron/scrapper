@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from urllib.parse import urljoin
 
@@ -108,6 +109,7 @@ class MarketplaceScraperService:
 
 class MthandiziScraperService:
   REQUEST_TIMEOUT_SECONDS = 60
+  PROFILE_FETCH_WORKERS = 5
 
   def __init__(self, base_url="https://mthandizi.com/businesses-in-lilongwe"):
     self.base_url = base_url
@@ -153,105 +155,75 @@ class MthandiziScraperService:
           "current": 0,
           "total": len(business_cards),
           "businesses_processed": 0,
+          "businesses_added": 0,
           "products_processed": 0,
+          "products_added": 0,
       })
-    for business_index, (card, name_elem) in enumerate(business_cards, start=1):
-      business_name = name_elem.get_text(strip=True)
-      if progress_callback:
-        progress_callback({
-            "stage": "processing_businesses",
-            "message": f"Processing {business_name}",
-            "current": business_index,
-            "total": len(business_cards),
-            "businesses_processed": processed_count,
-            "products_processed": processed_product_count,
-        })
+    with ThreadPoolExecutor(
+        max_workers=self.PROFILE_FETCH_WORKERS
+    ) as executor:
+      for batch_start in range(
+          0, len(business_cards), self.PROFILE_FETCH_WORKERS
+      ):
+        batch = [
+            (
+                business_index,
+                card,
+                name_elem,
+                urljoin(self.base_url, card["href"]),
+            )
+            for business_index, (card, name_elem) in enumerate(
+                business_cards[
+                    batch_start:batch_start + self.PROFILE_FETCH_WORKERS
+                ],
+                start=batch_start + 1,
+            )
+        ]
+        for business_index, _, name_elem, _ in batch:
+          if progress_callback:
+            progress_callback({
+                "stage": "processing_businesses",
+                "message": f"Fetching {name_elem.get_text(strip=True)}",
+                "current": business_index,
+                "total": len(business_cards),
+                "businesses_processed": processed_count,
+                "businesses_added": created_count,
+                "products_processed": processed_product_count,
+                "products_added": created_product_count,
+            })
 
-      location_icon = card.select_one("svg.lucide-map-pin")
-      location_elem = (
-          location_icon.find_parent("div").select_one("span")
-          if location_icon and location_icon.find_parent("div")
-          else None
-      )
-      profile_url = urljoin(self.base_url, card["href"])
-      profile_response = requests.get(
-          profile_url,
-          headers=headers,
-          timeout=self.REQUEST_TIMEOUT_SECONDS,
-      )
-      profile_response.raise_for_status()
-      profile_soup = BeautifulSoup(profile_response.text, "html.parser")
-      whatsapp_link = profile_soup.select_one('a[href*="wa.me/"]')
-      if whatsapp_link is None:
-        whatsapp_link = profile_soup.select_one(
-            'a[href*="api.whatsapp.com/send?phone="]'
+        profile_html = executor.map(
+            self._fetch_profile_html,
+            [profile_url for _, _, _, profile_url in batch],
+            [headers] * len(batch),
         )
-      phone_link = profile_soup.select_one('a[href^="tel:"]')
-      whatsapp_phone = (
-          re.search(
-              r"(?:wa\.me/|[?&]phone=)(\+?\d+)",
-              whatsapp_link["href"],
+        for (business_index, card, name_elem, profile_url), html in zip(
+            batch, profile_html
+        ):
+          business_name = name_elem.get_text(strip=True)
+          business_created, products_processed, products_created = (
+              self._save_business_profile(
+                  card,
+                  business_name,
+                  profile_url,
+                  html,
+              )
           )
-          if whatsapp_link
-          else None
-      )
-      phone_number = (
-          whatsapp_phone.group(1)
-          if whatsapp_phone
-          else phone_link["href"].removeprefix("tel:")
-          if phone_link
-          else ""
-      )
-      email_link = profile_soup.select_one('a[href^="mailto:"]')
-      email = (
-          email_link["href"].removeprefix("mailto:").split("?", 1)[0].strip()
-          if email_link
-          else ""
-      )
-      location = (
-          location_elem.get_text(strip=True)
-          if location_elem
-          else "Lilongwe"
-      )
-
-      _, created = MthandiziBusinessLead.objects.update_or_create(
-          profile_url=profile_url,
-          defaults={
-              "business_name": business_name,
-              "phone_number": phone_number,
-              "email": email,
-              "location": location,
-          },
-      )
-      processed_count += 1
-      if created:
-        created_count += 1
-
-      for product in self._parse_featured_products(profile_soup, profile_url):
-        _, product_created = ScrapedLead.objects.update_or_create(
-            listing_url=product["listing_url"],
-            defaults={
-                "source_platform": "Mthandizi",
-                "vendor_name": business_name,
-                "phone_number": phone_number,
-                "listing_title": product["listing_title"],
-                "item_price": product["item_price"],
-                "location_district": location,
-                "category": product["category"],
-            },
-        )
-        processed_product_count += 1
-        if product_created:
-          created_product_count += 1
-      if progress_callback:
-        progress_callback({
-            "stage": "processing_businesses",
-            "message": f"Processed {business_name}",
-            "current": business_index,
-            "total": len(business_cards),
-            "businesses_processed": processed_count,
-            "products_processed": processed_product_count,
-        })
+          processed_count += 1
+          created_count += int(business_created)
+          processed_product_count += products_processed
+          created_product_count += products_created
+          if progress_callback:
+            progress_callback({
+                "stage": "processing_businesses",
+                "message": f"Processed {business_name}",
+                "current": business_index,
+                "total": len(business_cards),
+                "businesses_processed": processed_count,
+                "businesses_added": created_count,
+                "products_processed": processed_product_count,
+                "products_added": created_product_count,
+            })
 
     return (
         processed_count,
@@ -259,6 +231,91 @@ class MthandiziScraperService:
         processed_product_count,
         created_product_count,
     )
+
+  def _fetch_profile_html(self, profile_url, headers):
+    profile_response = requests.get(
+        profile_url,
+        headers=headers,
+        timeout=self.REQUEST_TIMEOUT_SECONDS,
+    )
+    profile_response.raise_for_status()
+    return profile_response.text
+
+  def _save_business_profile(
+      self,
+      card,
+      business_name,
+      profile_url,
+      profile_html,
+  ):
+    location_icon = card.select_one("svg.lucide-map-pin")
+    location_elem = (
+        location_icon.find_parent("div").select_one("span")
+        if location_icon and location_icon.find_parent("div")
+        else None
+    )
+    profile_soup = BeautifulSoup(profile_html, "html.parser")
+    whatsapp_link = profile_soup.select_one('a[href*="wa.me/"]')
+    if whatsapp_link is None:
+      whatsapp_link = profile_soup.select_one(
+          'a[href*="api.whatsapp.com/send?phone="]'
+      )
+    phone_link = profile_soup.select_one('a[href^="tel:"]')
+    whatsapp_phone = (
+        re.search(
+            r"(?:wa\.me/|[?&]phone=)(\+?\d+)",
+            whatsapp_link["href"],
+        )
+        if whatsapp_link
+        else None
+    )
+    phone_number = (
+        whatsapp_phone.group(1)
+        if whatsapp_phone
+        else phone_link["href"].removeprefix("tel:")
+        if phone_link
+        else ""
+    )
+    email_link = profile_soup.select_one('a[href^="mailto:"]')
+    email = (
+        email_link["href"].removeprefix("mailto:").split("?", 1)[0].strip()
+        if email_link
+        else ""
+    )
+    location = (
+        location_elem.get_text(strip=True)
+        if location_elem
+        else "Lilongwe"
+    )
+
+    _, business_created = MthandiziBusinessLead.objects.update_or_create(
+        profile_url=profile_url,
+        defaults={
+            "business_name": business_name,
+            "phone_number": phone_number,
+            "email": email,
+            "location": location,
+        },
+    )
+    products_processed = 0
+    products_created = 0
+    for product in self._parse_featured_products(profile_soup, profile_url):
+      _, product_created = ScrapedLead.objects.update_or_create(
+          listing_url=product["listing_url"],
+          defaults={
+              "source_platform": "Mthandizi",
+              "vendor_name": business_name,
+              "phone_number": phone_number,
+              "listing_title": product["listing_title"],
+              "item_price": product["item_price"],
+              "location_district": location,
+              "category": product["category"],
+          },
+      )
+      products_processed += 1
+      if product_created:
+        products_created += 1
+    return business_created, products_processed, products_created
 
   @staticmethod
   def _parse_featured_products(profile_soup, profile_url):

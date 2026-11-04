@@ -47,7 +47,9 @@ The root path redirects to `/overview`. Production hosting should serve
 
 The Mthandizi scraper is started with `POST /api/scrape-mthandizi/`. The
 frontend polls the returned run ID at `/api/scrape-mthandizi/<run-id>/` until
-the run completes or fails. Apply Django migrations before starting the API:
+the run completes or fails. Existing business profiles are checked again so
+new featured products can be discovered. Apply Django migrations before
+starting the API:
 
 ```powershell
 cd pg_scrap
