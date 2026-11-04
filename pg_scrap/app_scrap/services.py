@@ -123,6 +123,8 @@ class MthandiziScraperService:
 
     processed_count = 0
     created_count = 0
+    processed_product_count = 0
+    created_product_count = 0
     for card in listings:
       name_elem = card.select_one("h2, h3")
       if name_elem is None:
@@ -169,22 +171,103 @@ class MthandiziScraperService:
           if email_link
           else ""
       )
+      business_name = name_elem.get_text(strip=True)
+      location = (
+          location_elem.get_text(strip=True)
+          if location_elem
+          else "Lilongwe"
+      )
 
       _, created = MthandiziBusinessLead.objects.update_or_create(
           profile_url=profile_url,
           defaults={
-              "business_name": name_elem.get_text(strip=True),
+              "business_name": business_name,
               "phone_number": phone_number,
               "email": email,
-              "location": (
-                  location_elem.get_text(strip=True)
-                  if location_elem
-                  else "Lilongwe"
-              ),
+              "location": location,
           },
       )
       processed_count += 1
       if created:
         created_count += 1
 
-    return processed_count, created_count
+      for product in self._parse_featured_products(profile_soup, profile_url):
+        _, product_created = ScrapedLead.objects.update_or_create(
+            listing_url=product["listing_url"],
+            defaults={
+                "source_platform": "Mthandizi",
+                "vendor_name": business_name,
+                "phone_number": phone_number,
+                "listing_title": product["listing_title"],
+                "item_price": product["item_price"],
+                "location_district": location,
+                "category": product["category"],
+            },
+        )
+        processed_product_count += 1
+        if product_created:
+          created_product_count += 1
+
+    return (
+        processed_count,
+        created_count,
+        processed_product_count,
+        created_product_count,
+    )
+
+  @staticmethod
+  def _parse_featured_products(profile_soup, profile_url):
+    heading = next(
+        (
+            element
+            for element in profile_soup.select("h2")
+            if (
+                element.get_text(" ", strip=True).casefold()
+                == "featured products"
+            )
+        ),
+        None,
+    )
+    section = heading.find_parent("section") if heading else None
+    if section is None:
+      return []
+
+    products = []
+    for product_card in section.select('a[href*="/shop/"]'):
+      title = product_card.select_one("h3, h4")
+      if title is None:
+        continue
+
+      price = next(
+          (
+              span.get_text(" ", strip=True)
+              for span in product_card.select("span")
+              if "MWK" in span.get_text(" ", strip=True).upper()
+              and "line-through" not in span.get("class", [])
+          ),
+          "",
+      )
+      price_match = re.search(r"MWK\s*([\d,]+(?:\.\d{1,2})?)", price, re.I)
+      item_price = (
+          Decimal(price_match.group(1).replace(",", ""))
+          if price_match
+          else None
+      )
+      category = next(
+          (
+              span.get_text(" ", strip=True)
+              for span in product_card.select("span.bg-muted")
+              if span.get_text(" ", strip=True)
+          ),
+          None,
+      )
+      products.append(
+          {
+              "listing_url": urljoin(profile_url, product_card["href"]),
+              "listing_title": title.get_text(" ", strip=True),
+              "item_price": item_price,
+              "category": category,
+          }
+      )
+
+    return products

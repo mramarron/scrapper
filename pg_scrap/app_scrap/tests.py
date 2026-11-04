@@ -156,6 +156,13 @@ class MthandiziScraperServiceTests(TestCase):
                 '<a href="https://wa.me/message/QSZPRR7EZHFVH1">WhatsApp</a>'
                 '<a href="tel:+265991234567">Call Business</a>'
                 '<a href="mailto:info@example.mw">Email</a>'
+                '<section><h2>Featured products</h2>'
+                '<a href="/shop/example-business/widget?ref=partner_profile">'
+                '<h3>Widget</h3><span class="bg-muted">Retail</span>'
+                '<span>MWK 12,500</span>'
+                '<span class="line-through">MWK 15,000</span></a>'
+                '<a href="/shop/example-business">'
+                '<span>Visit shop</span></a></section>'
             ),
             "raise_for_status": lambda self: None,
         },
@@ -176,9 +183,23 @@ class MthandiziScraperServiceTests(TestCase):
             "https://mthandizi.com/partners/example-business?ref=marketplace"
         )
     )
-    self.assertEqual(first_result, (1, 1))
-    self.assertEqual(second_result, (1, 0))
+    product = ScrapedLead.objects.get(
+        listing_url=(
+            "https://mthandizi.com/shop/example-business/widget"
+            "?ref=partner_profile"
+        )
+    )
+    self.assertEqual(first_result, (1, 1, 1, 1))
+    self.assertEqual(second_result, (1, 0, 1, 0))
     self.assertEqual(business.business_name, "Example Business")
     self.assertEqual(business.location, "Lilongwe")
     self.assertEqual(business.phone_number, "+265991234567")
     self.assertEqual(business.email, "info@example.mw")
+    self.assertEqual(ScrapedLead.objects.count(), 1)
+    self.assertEqual(product.source_platform, "Mthandizi")
+    self.assertEqual(product.vendor_name, "Example Business")
+    self.assertEqual(product.phone_number, "+265991234567")
+    self.assertEqual(product.listing_title, "Widget")
+    self.assertEqual(product.item_price, Decimal("12500"))
+    self.assertEqual(product.location_district, "Lilongwe")
+    self.assertEqual(product.category, "Retail")
