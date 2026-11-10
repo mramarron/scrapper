@@ -6,8 +6,7 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-#PG_SCRAP_ROOT = PROJECT_ROOT / "pg_scrap"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
 
@@ -27,7 +26,7 @@ def _database_url() -> URL | str:
             database=database_name,
         )
 
-    return f"connected to {database_name}"
+    return f"sqlite:///{PROJECT_ROOT / 'pg_scrap' / 'db.sqlite3'}"
 
 
 DATABASE_URL = _database_url()

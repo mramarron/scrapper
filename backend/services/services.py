@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import MthandiziBusinessLead, ScrapedLead
+from backend.models import models
 
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -218,13 +218,13 @@ class MthandiziScraperService:
 
         with self.session_factory() as session:
             business = session.scalar(
-                select(MthandiziBusinessLead).where(
-                    MthandiziBusinessLead.profile_url == profile_url
+                select(models.MthandiziBusinessLead).where(
+                    models.MthandiziBusinessLead.profile_url == profile_url
                 )
             )
             business_created = business is None
             if business is None:
-                business = MthandiziBusinessLead(profile_url=profile_url)
+                business = models.MthandiziBusinessLead(profile_url=profile_url)
                 session.add(business)
             business.business_name = business_name
             business.phone_number = phone_number
@@ -237,12 +237,12 @@ class MthandiziScraperService:
                 profile_soup, profile_url
             ):
                 listing = session.scalar(
-                    select(ScrapedLead).where(
-                        ScrapedLead.listing_url == product["listing_url"]
+                    select(models.ScrapedLead).where(
+                        models.ScrapedLead.listing_url == product["listing_url"]
                     )
                 )
                 if listing is None:
-                    listing = ScrapedLead(listing_url=product["listing_url"])
+                    listing = models.ScrapedLead(listing_url=product["listing_url"])
                     session.add(listing)
                     products_created += 1
                 listing.source_platform = "Mthandizi"

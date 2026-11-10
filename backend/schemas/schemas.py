@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from .models import MthandiziBusinessLead, MthandiziScrapeRun, ScrapedLead
+from backend.models.models import MthandiziBusinessLead, MthandiziScrapeRun, ScrapedLead
 
 
 class ScrapedListingResponse(BaseModel):

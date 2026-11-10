@@ -7,9 +7,14 @@ from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from ..database import SessionLocal
-from ..models import MthandiziBusinessLead, MthandiziScrapeRun, ScrapedLead, utc_now
-from ..schemas import (
+from ..config.database import SessionLocal
+from ..models.models import (
+    MthandiziBusinessLead,
+    MthandiziScrapeRun,
+    ScrapedLead,
+    utc_now,
+)
+from ..schemas.schemas import (
     BusinessResponse,
     ScrapeRunResponse,
     ScrapedListingResponse,
@@ -17,7 +22,7 @@ from ..schemas import (
     serialize_listing,
     serialize_scrape_run,
 )
-from ..services import MthandiziScraperService, describe_scrape_error
+from ..services.services import MthandiziScraperService, describe_scrape_error
 
 
 logger = logging.getLogger(__name__)
