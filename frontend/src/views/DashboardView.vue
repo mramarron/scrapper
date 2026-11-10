@@ -293,6 +293,11 @@ function dateKey(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+async function getFastAPIData<T>(endpoint: string): Promise<T> {
+  const response = await api.get<T>(endpoint)
+  return response.data
+}
+
 async function loadData() {
   loading.value = true
   error.value = null
@@ -306,7 +311,7 @@ async function loadData() {
     businesses.value = businessResponse.data
     hasLoaded.value = true
   } catch (cause) {
-    console.error('Failed to load directory overview from Django.', cause)
+    console.error('Failed to load directory overview from FastAPI.', cause)
     error.value = 'We could not load the latest directory data. Check your connection and try again.'
   } finally {
     loading.value = false

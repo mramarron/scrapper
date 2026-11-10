@@ -32,6 +32,12 @@ const router = createRouter({
       meta: { title: 'Settings' },
     },
     {
+      path: '/fastAPI',
+      name: 'fastAPI',
+      component: () => import('./views/FastAPIView.vue'),
+      meta: { title: 'FastAPI' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/overview',
     },

@@ -83,7 +83,7 @@ async function loadBusinesses() {
     businesses.value = response.data
     hasLoaded.value = true
   } catch (cause) {
-    console.error('Failed to load local businesses from Django.', cause)
+    console.error('Failed to load local businesses from FastAPI.', cause)
     error.value = 'We could not load local businesses. Check your connection and try again.'
   } finally {
     loading.value = false

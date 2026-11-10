@@ -79,7 +79,7 @@ async function loadListings() {
     listings.value = response.data
     hasLoaded.value = true
   } catch (cause) {
-    console.error('Failed to load marketplace listings from Django.', cause)
+    console.error('Failed to load marketplace listings from FastAPI.', cause)
     error.value = 'We could not load marketplace listings. Check your connection and try again.'
   } finally {
     loading.value = false
