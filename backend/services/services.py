@@ -10,6 +10,10 @@ from backend.services.mthandizi_parser import (
     parse_directory_businesses,
 )
 from backend.services.mthandizi_repository import MthandiziLeadRepository
+from backend.services.taxpayer_verification import (
+    TaxpayerDatabaseNotConfiguredError,
+    TaxpayerDatabaseQueryError,
+)
 
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -201,6 +205,16 @@ def describe_scrape_error(error: Exception) -> tuple[str, str]:
         return (
             "directory_empty",
             "No business profiles were found in the Mthandizi directory.",
+        )
+    if isinstance(error, TaxpayerDatabaseNotConfiguredError):
+        return (
+            "taxpayer_database_not_configured",
+            "Taxpayer verification needs a configured SQL Server connection.",
+        )
+    if isinstance(error, TaxpayerDatabaseQueryError):
+        return (
+            "taxpayer_database_error",
+            "The taxpayer SQL Server could not complete verification.",
         )
     if isinstance(error, SQLAlchemyError):
         return (

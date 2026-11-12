@@ -52,33 +52,62 @@ def _mssql_database_url() -> URL | str | None:
         return database_url
 
     database_name = os.getenv("MSSQL_DB_NAME")
-    mssql_settings = (
-        "MSSQL_DB_HOST",
-        "MSSQL_DB_PORT",
-        "MSSQL_DB_USER",
-        "MSSQL_DB_PASSWORD",
-        "MSSQL_DB_DRIVER",
-    )
+    trusted_connection = _mssql_trusted_connection_enabled()
     if not database_name:
-        if any(os.getenv(setting) for setting in mssql_settings):
+        if trusted_connection or any(
+            os.getenv(setting)
+            for setting in (
+                "MSSQL_DB_HOST",
+                "MSSQL_DB_PORT",
+                "MSSQL_DB_USER",
+                "MSSQL_DB_PASSWORD",
+                "MSSQL_DB_DRIVER",
+            )
+        ):
             raise ValueError(
                 "MSSQL_DB_NAME is required when configuring the secondary "
                 "SQL Server connection."
             )
         return None
 
+    username = os.getenv("MSSQL_DB_USER") or None
+    password = os.getenv("MSSQL_DB_PASSWORD") or None
+    if trusted_connection and (username or password):
+        raise ValueError(
+            "Do not set MSSQL_DB_USER or MSSQL_DB_PASSWORD when using "
+            "Windows authentication."
+        )
+    if trusted_connection and os.name != "nt":
+        raise ValueError(
+            "Windows authentication requires running the application on Windows."
+        )
+
     database_port = os.getenv("MSSQL_DB_PORT")
+    query = {
+        "driver": os.getenv("MSSQL_DB_DRIVER")
+        or "ODBC Driver 18 for SQL Server"
+    }
+
+    # The pyodbc dialect uses Trusted_Connection when credentials are omitted.
     return URL.create(
         "mssql+pyodbc",
-        username=os.getenv("MSSQL_DB_USER") or None,
-        password=os.getenv("MSSQL_DB_PASSWORD") or None,
+        username=username,
+        password=password,
         host=os.getenv("MSSQL_DB_HOST") or None,
         port=int(database_port) if database_port else None,
         database=database_name,
-        query={
-            "driver": os.getenv("MSSQL_DB_DRIVER")
-            or "ODBC Driver 18 for SQL Server"
-        },
+        query=query,
+    )
+
+
+def _mssql_trusted_connection_enabled() -> bool:
+    value = os.getenv("MSSQL_DB_TRUSTED_CONNECTION", "false").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"0", "false", "no", ""}:
+        return False
+    raise ValueError(
+        "MSSQL_DB_TRUSTED_CONNECTION must be true or false."
     )
 
 

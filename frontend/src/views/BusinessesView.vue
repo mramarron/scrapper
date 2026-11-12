@@ -16,6 +16,12 @@
       <span class="notice-icon" aria-hidden="true">!</span><span>{{ error }}</span>
       <button class="notice-action" type="button" @click="loadBusinesses">Try again</button>
     </div>
+    <div v-if="verificationError" class="notice notice-error" role="alert">
+      <span class="notice-icon" aria-hidden="true">!</span><span>{{ verificationError }}</span>
+    </div>
+    <div v-if="verificationMessage" class="notice notice-success" role="status">
+      {{ verificationMessage }}
+    </div>
 
     <section class="directory-panel directory-page-panel" aria-labelledby="businesses-title">
       <div class="panel-toolbar">
@@ -48,10 +54,64 @@
               <a v-if="business.email" class="business-email" :href="`mailto:${business.email}`" :aria-label="`Email ${business.business_name}`">Email</a>
               <a class="business-external" :href="business.profile_url" target="_blank" rel="noopener noreferrer" :aria-label="`View ${business.business_name} profile`"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg></a>
             </div>
+            <section
+              class="taxpayer-review"
+              :aria-label="`Taxpayer verification for ${business.business_name}`"
+            >
+              <div class="taxpayer-review-heading">
+                <div>
+                  <p class="taxpayer-review-label">TAXPAYER VERIFICATION</p>
+                  <p class="taxpayer-review-status">{{ verificationSummary(business) }}</p>
+                </div>
+                <button
+                  class="button button-primary taxpayer-verify-button"
+                  type="button"
+                  :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
+                  @click="verifyBusiness(business.id)"
+                >
+                  {{ verificationButtonLabel(business) }}
+                </button>
+              </div>
+              <ul v-if="business.taxpayer_matches.length" class="taxpayer-match-list">
+                <li
+                  v-for="match in business.taxpayer_matches"
+                  :key="match.id"
+                  class="taxpayer-match"
+                >
+                  <div>
+                    <strong>{{ match.taxpayer_business_name }}</strong>
+                    <span
+                      class="taxpayer-match-status"
+                      :class="`is-${match.status}`"
+                    >{{ match.status }}</span>
+                  </div>
+                  <div v-if="match.status === 'pending'" class="taxpayer-match-actions">
+                    <button
+                      class="button button-primary"
+                      type="button"
+                      :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
+                      @click="reviewMatch(business.id, match.id, 'approve')"
+                    >
+                      {{ reviewingMatchId === match.id ? 'Saving…' : 'Approve' }}
+                    </button>
+                    <button
+                      class="button taxpayer-reject-button"
+                      type="button"
+                      :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
+                      @click="reviewMatch(business.id, match.id, 'reject')"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </section>
           </article>
         </div>
         <div v-else class="empty-state">{{ searchQuery ? `No businesses match “${searchQuery}”. Try another search.` : 'No businesses have been collected yet.' }}</div>
-        <p v-if="hasLoaded && businesses.length" class="results-note">Showing the latest {{ businesses.length }} businesses returned by the directory.</p>
+        <p v-if="hasLoaded && businesses.length" class="results-note">
+          Showing all {{ businesses.length }} businesses in your local directory.
+        </p>
       </div>
     </section>
   </section>
@@ -65,6 +125,10 @@ const businesses = ref<BusinessLead[]>([])
 const loading = ref(true)
 const hasLoaded = ref(false)
 const error = ref<string | null>(null)
+const verificationError = ref<string | null>(null)
+const verificationMessage = ref<string | null>(null)
+const verifyingBusinessId = ref<number | null>(null)
+const reviewingMatchId = ref<number | null>(null)
 const searchQuery = ref('')
 const filteredBusinesses = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
@@ -88,6 +152,75 @@ async function loadBusinesses() {
   } finally {
     loading.value = false
   }
+}
+
+async function verifyBusiness(businessId: number) {
+  verifyingBusinessId.value = businessId
+  verificationError.value = null
+  verificationMessage.value = null
+  try {
+    const response = await api.post<BusinessLead>(`/businesses/${businessId}/verify/`)
+    updateBusiness(response.data)
+    verificationMessage.value = 'Taxpayer verification is up to date.'
+  } catch (cause) {
+    console.error(
+      'Failed to verify a business against the taxpayer database.',
+      cause,
+    )
+    verificationError.value =
+      'We could not verify this business. Check the SQL Server connection and try again.'
+  } finally {
+    verifyingBusinessId.value = null
+  }
+}
+
+async function reviewMatch(
+  businessId: number,
+  matchId: number,
+  decision: 'approve' | 'reject',
+) {
+  reviewingMatchId.value = matchId
+  verificationError.value = null
+  verificationMessage.value = null
+  try {
+    const response = await api.post<BusinessLead>(
+      `/businesses/${businessId}/matches/${matchId}/${decision}/`,
+    )
+    updateBusiness(response.data)
+    verificationMessage.value =
+      decision === 'approve'
+        ? 'Taxpayer match approved and TIN saved.'
+        : 'Taxpayer candidate rejected.'
+  } catch (cause) {
+    console.error(`Failed to ${decision} a taxpayer match.`, cause)
+    verificationError.value =
+      'We could not update this taxpayer review. Refresh the page and try again.'
+  } finally {
+    reviewingMatchId.value = null
+  }
+}
+
+function updateBusiness(updatedBusiness: BusinessLead) {
+  const index = businesses.value.findIndex(({ id }) => id === updatedBusiness.id)
+  if (index >= 0) businesses.value[index] = updatedBusiness
+}
+
+function verificationSummary(business: BusinessLead): string {
+  if (business.matched_tin) return `Approved TIN: ${business.matched_tin}`
+  const pendingCount = business.taxpayer_matches.filter(
+    (match) => match.status === 'pending',
+  ).length
+  if (pendingCount) {
+    return `${pendingCount} possible match${pendingCount === 1 ? '' : 'es'} to review`
+  }
+  if (!business.is_checked) return 'Not verified yet'
+  if (business.taxpayer_matches.length) return 'No candidate approved'
+  return 'No matching taxpayer found'
+}
+
+function verificationButtonLabel(business: BusinessLead): string {
+  if (verifyingBusinessId.value === business.id) return 'Checking…'
+  return business.is_checked ? 'Recheck' : 'Verify'
 }
 
 function getInitials(name: string): string {

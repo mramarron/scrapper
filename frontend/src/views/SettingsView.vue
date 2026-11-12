@@ -88,12 +88,24 @@
           · {{ run.progress.products_added }} new
         </span>
       </p>
+      <p
+        v-if="run?.progress?.stage === 'verifying_businesses' && run.progress.total"
+        class="scrape-progress-count"
+      >
+        Business {{ run.progress.current }} of {{ run.progress.total }} checked
+        <span v-if="run.progress.taxpayer_matches_found !== undefined">
+          · {{ run.progress.taxpayer_matches_found }} candidates for review
+        </span>
+      </p>
 
       <div v-if="run?.status === 'failed'" class="scrape-error" role="alert">
         <strong>{{ errorTitle }}</strong>
         <span>{{ errorMessage }}</span>
       </div>
-      <pre v-if="displayStatus === 'completed' && run?.output" class="scrape-output">{{ run.output }}</pre>
+      <pre
+        v-if="(displayStatus === 'completed' || displayStatus === 'failed') && run?.output"
+        class="scrape-output"
+      >{{ run.output }}</pre>
     </section>
   </section>
 </template>
@@ -110,6 +122,7 @@ const progressSteps = [
   'Starting scraper services',
   'Loading the Mthandizi business directory',
   'Processing profiles and featured products',
+  'Verify businesses against taxpayers',
 ]
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -123,6 +136,8 @@ const errorTitles: Record<NonNullable<ScrapeRun['error_code']>, string> = {
   upstream_server_error: 'Mthandizi service problem',
   upstream_request_failed: 'Could not load Mthandizi page',
   directory_empty: 'No business profiles found',
+  taxpayer_database_not_configured: 'Taxpayer database is not configured',
+  taxpayer_database_error: 'Taxpayer database verification failed',
   storage_error: 'Could not save scraper results',
   worker_unavailable: 'Scraper could not start',
   unexpected_error: 'Unexpected scraper error',
@@ -153,6 +168,7 @@ const activeProgressStep = computed(() => {
   if (stage === 'starting') return 0
   if (stage === 'loading_directory') return 1
   if (stage === 'processing_businesses') return 2
+  if (stage === 'verifying_businesses') return 3
   return -1
 })
 const statusTitle = computed(() => {

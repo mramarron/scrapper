@@ -35,6 +35,15 @@ export interface BusinessLead {
   email: string;
   profile_url: string;
   scraped_at: string;
+  is_checked: boolean;
+  matched_tin: string | null;
+  taxpayer_matches: TaxpayerMatch[];
+}
+
+export interface TaxpayerMatch {
+  id: number;
+  taxpayer_business_name: string;
+  status: "pending" | "approved" | "rejected";
 }
 
 export interface ScrapeRun {
@@ -48,12 +57,19 @@ export interface ScrapeRun {
     | "upstream_server_error"
     | "upstream_request_failed"
     | "directory_empty"
+    | "taxpayer_database_not_configured"
+    | "taxpayer_database_error"
     | "storage_error"
     | "worker_unavailable"
     | "unexpected_error"
     | "";
   progress: {
-    stage?: "starting" | "loading_directory" | "processing_businesses" | "completed";
+    stage?:
+      | "starting"
+      | "loading_directory"
+      | "processing_businesses"
+      | "verifying_businesses"
+      | "completed";
     message?: string;
     current?: number;
     total?: number;
@@ -61,6 +77,7 @@ export interface ScrapeRun {
     businesses_added?: number;
     products_processed?: number;
     products_added?: number;
+    taxpayer_matches_found?: number;
   };
   output: string;
   error: string;

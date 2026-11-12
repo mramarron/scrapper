@@ -21,6 +21,12 @@ class ScrapedListingResponse(BaseModel):
     scraped_at: str
 
 
+class TaxpayerMatchResponse(BaseModel):
+    id: int
+    taxpayer_business_name: str
+    status: Literal["pending", "approved", "rejected"]
+
+
 class BusinessResponse(BaseModel):
     id: int
     business_name: str
@@ -30,6 +36,9 @@ class BusinessResponse(BaseModel):
     email: str
     profile_url: str
     scraped_at: str
+    is_checked: bool
+    matched_tin: str | None
+    taxpayer_matches: list[TaxpayerMatchResponse]
 
 
 class ScrapeRunResponse(BaseModel):
@@ -78,6 +87,16 @@ def serialize_business(business: MthandiziBusinessLead) -> BusinessResponse:
         email=business.email,
         profile_url=business.profile_url,
         scraped_at=_timestamp(business.scraped_at),
+        is_checked=business.is_checked,
+        matched_tin=business.matched_tin,
+        taxpayer_matches=[
+            TaxpayerMatchResponse(
+                id=match.id,
+                taxpayer_business_name=match.taxpayer_business_name,
+                status=match.status,
+            )
+            for match in business.taxpayer_matches
+        ],
     )
 
 
