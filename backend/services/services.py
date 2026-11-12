@@ -1,16 +1,15 @@
-import re
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal
 from typing import Any, Callable
-from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.models import models
+from backend.services.mthandizi_parser import (
+    parse_business_profile,
+    parse_directory_businesses,
+)
+from backend.services.mthandizi_repository import MthandiziLeadRepository
 
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -29,7 +28,7 @@ class MthandiziScraperService:
         session_factory: sessionmaker[Session],
         base_url: str = "https://mthandizi.com/businesses-in-lilongwe",
     ) -> None:
-        self.session_factory = session_factory
+        self.repository = MthandiziLeadRepository(session_factory)
         self.base_url = base_url
 
     def scrape_directory(
@@ -54,18 +53,12 @@ class MthandiziScraperService:
         )
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        listings = soup.select('a[href*="/partners/"]')
-        if not listings:
+        businesses = parse_directory_businesses(response.text, self.base_url)
+        if not businesses:
             raise MthandiziDirectoryEmptyError(
                 "Mthandizi directory contained no business profiles"
             )
 
-        business_cards = [
-            (card, card.select_one("h2, h3"))
-            for card in listings
-            if card.select_one("h2, h3") is not None
-        ]
         businesses_processed = 0
         businesses_added = 0
         products_processed = 0
@@ -77,7 +70,7 @@ class MthandiziScraperService:
                     "stage": "processing_businesses",
                     "message": "Processing business profiles and featured products",
                     "current": 0,
-                    "total": len(business_cards),
+                    "total": len(businesses),
                     "businesses_processed": 0,
                     "businesses_added": 0,
                     "products_processed": 0,
@@ -89,32 +82,25 @@ class MthandiziScraperService:
             max_workers=self.PROFILE_FETCH_WORKERS
         ) as executor:
             for batch_start in range(
-                0, len(business_cards), self.PROFILE_FETCH_WORKERS
+                0, len(businesses), self.PROFILE_FETCH_WORKERS
             ):
                 batch = [
-                    (
-                        business_index,
-                        card,
-                        name_element,
-                        urljoin(self.base_url, card["href"]),
-                    )
-                    for business_index, (card, name_element) in enumerate(
-                        business_cards[
+                    (business_index, business)
+                    for business_index, business in enumerate(
+                        businesses[
                             batch_start : batch_start + self.PROFILE_FETCH_WORKERS
                         ],
                         start=batch_start + 1,
                     )
                 ]
                 if progress_callback:
-                    for business_index, _, name_element, _ in batch:
+                    for business_index, business in batch:
                         progress_callback(
                             {
                                 "stage": "processing_businesses",
-                                "message": (
-                                    f"Fetching {name_element.get_text(strip=True)}"
-                                ),
+                                "message": f"Fetching {business.business_name}",
                                 "current": business_index,
-                                "total": len(business_cards),
+                                "total": len(businesses),
                                 "businesses_processed": businesses_processed,
                                 "businesses_added": businesses_added,
                                 "products_processed": products_processed,
@@ -124,27 +110,31 @@ class MthandiziScraperService:
 
                 profile_html = executor.map(
                     self._fetch_profile_html,
-                    [profile_url for _, _, _, profile_url in batch],
+                    [business.profile_url for _, business in batch],
                     [headers] * len(batch),
                 )
-                for (business_index, card, name_element, profile_url), html in zip(
-                    batch, profile_html
-                ):
-                    business_name = name_element.get_text(strip=True)
-                    was_created, count, new_count = self._save_business_profile(
-                        card, business_name, profile_url, html
+                for (business_index, business), html in zip(batch, profile_html):
+                    profile = parse_business_profile(
+                        html, business.profile_url
+                    )
+                    (
+                        business_created,
+                        products_processed_count,
+                        products_added_count,
+                    ) = (
+                        self.repository.save_business_profile(business, profile)
                     )
                     businesses_processed += 1
-                    businesses_added += int(was_created)
-                    products_processed += count
-                    products_added += new_count
+                    businesses_added += int(business_created)
+                    products_processed += products_processed_count
+                    products_added += products_added_count
                     if progress_callback:
                         progress_callback(
                             {
                                 "stage": "processing_businesses",
-                                "message": f"Processed {business_name}",
+                                "message": f"Processed {business.business_name}",
                                 "current": business_index,
-                                "total": len(business_cards),
+                                "total": len(businesses),
                                 "businesses_processed": businesses_processed,
                                 "businesses_added": businesses_added,
                                 "products_processed": products_processed,
@@ -167,153 +157,6 @@ class MthandiziScraperService:
         )
         response.raise_for_status()
         return response.text
-
-    def _save_business_profile(
-        self,
-        card: Any,
-        business_name: str,
-        profile_url: str,
-        profile_html: str,
-    ) -> tuple[bool, int, int]:
-        location_icon = card.select_one("svg.lucide-map-pin")
-        location_container = (
-            location_icon.find_parent("div") if location_icon else None
-        )
-        location_element = (
-            location_container.select_one("span") if location_container else None
-        )
-        profile_soup = BeautifulSoup(profile_html, "html.parser")
-        whatsapp_link = profile_soup.select_one('a[href*="wa.me/"]')
-        if whatsapp_link is None:
-            whatsapp_link = profile_soup.select_one(
-                'a[href*="api.whatsapp.com/send?phone="]'
-            )
-        phone_link = profile_soup.select_one('a[href^="tel:"]')
-        whatsapp_phone = (
-            re.search(
-                r"(?:wa\.me/|[?&]phone=)(\+?\d+)",
-                whatsapp_link["href"],
-            )
-            if whatsapp_link
-            else None
-        )
-        phone_number = (
-            whatsapp_phone.group(1)
-            if whatsapp_phone
-            else phone_link["href"].removeprefix("tel:")
-            if phone_link
-            else ""
-        )
-        email_link = profile_soup.select_one('a[href^="mailto:"]')
-        email = (
-            email_link["href"].removeprefix("mailto:").split("?", 1)[0].strip()
-            if email_link
-            else ""
-        )
-        location = (
-            location_element.get_text(strip=True)
-            if location_element
-            else "Lilongwe"
-        )
-
-        with self.session_factory() as session:
-            business = session.scalar(
-                select(models.MthandiziBusinessLead).where(
-                    models.MthandiziBusinessLead.profile_url == profile_url
-                )
-            )
-            business_created = business is None
-            if business is None:
-                business = models.MthandiziBusinessLead(profile_url=profile_url)
-                session.add(business)
-            business.business_name = business_name
-            business.phone_number = phone_number
-            business.email = email
-            business.location = location
-
-            products_processed = 0
-            products_created = 0
-            for product in self._parse_featured_products(
-                profile_soup, profile_url
-            ):
-                listing = session.scalar(
-                    select(models.ScrapedLead).where(
-                        models.ScrapedLead.listing_url == product["listing_url"]
-                    )
-                )
-                if listing is None:
-                    listing = models.ScrapedLead(listing_url=product["listing_url"])
-                    session.add(listing)
-                    products_created += 1
-                listing.source_platform = "Mthandizi"
-                listing.vendor_name = business_name
-                listing.phone_number = phone_number
-                listing.listing_title = product["listing_title"]
-                listing.item_price = product["item_price"]
-                listing.location_district = location
-                listing.category = product["category"]
-                products_processed += 1
-            session.commit()
-
-        return business_created, products_processed, products_created
-
-    @staticmethod
-    def _parse_featured_products(
-        profile_soup: BeautifulSoup, profile_url: str
-    ) -> list[dict[str, Any]]:
-        heading = next(
-            (
-                element
-                for element in profile_soup.select("h2")
-                if element.get_text(" ", strip=True).casefold()
-                == "featured products"
-            ),
-            None,
-        )
-        section = heading.find_parent("section") if heading else None
-        if section is None:
-            return []
-
-        products = []
-        for product_card in section.select('a[href*="/shop/"]'):
-            title = product_card.select_one("h3, h4")
-            if title is None:
-                continue
-
-            price = next(
-                (
-                    span.get_text(" ", strip=True)
-                    for span in product_card.select("span")
-                    if "MWK" in span.get_text(" ", strip=True).upper()
-                    and "line-through" not in span.get("class", [])
-                ),
-                "",
-            )
-            price_match = re.search(
-                r"MWK\s*([\d,]+(?:\.\d{1,2})?)", price, re.I
-            )
-            item_price = (
-                Decimal(price_match.group(1).replace(",", ""))
-                if price_match
-                else None
-            )
-            category = next(
-                (
-                    span.get_text(" ", strip=True)
-                    for span in product_card.select("span.bg-muted")
-                    if span.get_text(" ", strip=True)
-                ),
-                None,
-            )
-            products.append(
-                {
-                    "listing_url": urljoin(profile_url, product_card["href"]),
-                    "listing_title": title.get_text(" ", strip=True),
-                    "item_price": item_price,
-                    "category": category,
-                }
-            )
-        return products
 
 
 def describe_scrape_error(error: Exception) -> tuple[str, str]:
