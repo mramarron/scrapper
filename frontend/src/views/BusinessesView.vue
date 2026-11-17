@@ -1,5 +1,6 @@
 <template>
   <section aria-labelledby="page-title">
+    <div :inert="Boolean(verificationProgress)">
     <div class="page-heading">
       <div>
         <p class="eyebrow"><span class="eyebrow-line"></span> LOCAL DIRECTORY</p>
@@ -114,12 +115,104 @@
         </p>
       </div>
     </section>
+    </div>
+
+  <div
+    v-if="verificationProgress"
+    class="verification-modal-backdrop"
+    @click.self="closeVerificationModal"
+    @keydown.esc.stop.prevent="closeVerificationModal"
+  >
+    <section
+      ref="verificationModalElement"
+      class="verification-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="verification-modal-title"
+      aria-describedby="verification-modal-status"
+      :aria-busy="isVerificationInProgress"
+      tabindex="-1"
+    >
+      <p class="section-kicker">TAXPAYER VERIFICATION</p>
+      <h2 id="verification-modal-title">
+        Verify {{ verificationProgress.businessName }}
+      </h2>
+      <ol
+        class="scrape-progress verification-progress"
+        aria-label="Verification progress"
+      >
+        <li
+          v-for="(step, index) in verificationSteps"
+          :key="step"
+          class="scrape-progress-step"
+          :class="verificationStepClass(index)"
+        >
+          <span class="scrape-progress-indicator" aria-hidden="true">
+            <svg
+              v-if="verificationStepClass(index) === 'is-complete'"
+              viewBox="0 0 24 24"
+            ><path d="m5 12 4 4L19 6" /></svg>
+            <span
+              v-else-if="verificationStepClass(index) === 'is-active'"
+              class="progress-spinner"
+            ></span>
+            <span
+              v-else-if="verificationStepClass(index) === 'is-failed'"
+              class="progress-failure"
+            >!</span>
+            <span v-else class="progress-pending"></span>
+          </span>
+          <span>{{ step }}</span>
+        </li>
+      </ol>
+      <p
+        id="verification-modal-status"
+        class="verification-modal-status"
+        :class="`is-${verificationProgress.stage}`"
+        role="status"
+        aria-live="polite"
+      >
+        {{ verificationProgressMessage }}
+      </p>
+      <p
+        v-if="verificationProgress.error"
+        class="verification-modal-error"
+        role="alert"
+      >
+        {{ verificationProgress.error }}
+      </p>
+      <button
+        v-if="!isVerificationInProgress"
+        class="button button-primary verification-modal-close"
+        type="button"
+        @click="closeVerificationModal"
+      >
+        Close
+      </button>
+    </section>
+  </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import api, { type BusinessLead } from '../services/api'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import axios from 'axios'
+import api, { type ApiErrorDetail, type BusinessLead } from '../services/api'
+
+type VerificationStage =
+  | 'connecting'
+  | 'querying'
+  | 'completed'
+  | 'connection-error'
+  | 'query-error'
+  | 'configuration-error'
+  | 'request-error'
+
+interface VerificationProgress {
+  businessName: string
+  stage: VerificationStage
+  error: string | null
+}
 
 const businesses = ref<BusinessLead[]>([])
 const loading = ref(true)
@@ -128,8 +221,38 @@ const error = ref<string | null>(null)
 const verificationError = ref<string | null>(null)
 const verificationMessage = ref<string | null>(null)
 const verifyingBusinessId = ref<number | null>(null)
+const verificationProgress = ref<VerificationProgress | null>(null)
+const verificationModalElement = ref<HTMLElement | null>(null)
 const reviewingMatchId = ref<number | null>(null)
 const searchQuery = ref('')
+const verificationSteps = [
+  'Connect to the taxpayer database',
+  'Query taxpayer records',
+]
+const isVerificationInProgress = computed(() =>
+  verificationProgress.value?.stage === 'connecting'
+  || verificationProgress.value?.stage === 'querying',
+)
+const verificationProgressMessage = computed(() => {
+  switch (verificationProgress.value?.stage) {
+    case 'connecting':
+      return 'Checking the connection to the taxpayer database…'
+    case 'querying':
+      return 'Connection confirmed. Searching for matching taxpayer records…'
+    case 'completed':
+      return 'Verification completed. Results have been updated.'
+    case 'connection-error':
+      return 'The connection was not established, so no taxpayer query was run.'
+    case 'query-error':
+      return 'Connection confirmed. The taxpayer lookup did not complete.'
+    case 'configuration-error':
+      return 'The taxpayer database is not configured.'
+    case 'request-error':
+      return 'The backend did not return a result. The database status is unknown.'
+    default:
+      return ''
+  }
+})
 const filteredBusinesses = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return businesses.value
@@ -158,20 +281,105 @@ async function verifyBusiness(businessId: number) {
   verifyingBusinessId.value = businessId
   verificationError.value = null
   verificationMessage.value = null
+  const business = businesses.value.find(({ id }) => id === businessId)
+  verificationProgress.value = {
+    businessName: business?.business_name ?? 'business',
+    stage: 'connecting',
+    error: null,
+  }
+  await nextTick()
+  verificationModalElement.value?.focus()
   try {
+    try {
+      await api.get('/taxpayer-database/connection/')
+    } catch (cause) {
+      setVerificationFailure(cause)
+      return
+    }
+
+    updateVerificationProgress({ stage: 'querying' })
     const response = await api.post<BusinessLead>(`/businesses/${businessId}/verify/`)
     updateBusiness(response.data)
     verificationMessage.value = 'Taxpayer verification is up to date.'
+    updateVerificationProgress({ stage: 'completed' })
   } catch (cause) {
     console.error(
       'Failed to verify a business against the taxpayer database.',
       cause,
     )
-    verificationError.value =
-      'We could not verify this business. Check the SQL Server connection and try again.'
+    setVerificationFailure(cause)
   } finally {
     verifyingBusinessId.value = null
   }
+}
+
+function setVerificationFailure(cause: unknown) {
+  const progress = verificationProgress.value
+  if (!progress) return
+
+  const detail = getApiErrorDetail(cause)
+  const stage: VerificationStage =
+    detail?.code === 'taxpayer_connection_error'
+      ? 'connection-error'
+      : detail?.code === 'taxpayer_query_error'
+        ? 'query-error'
+        : detail?.code === 'taxpayer_database_not_configured'
+          ? 'configuration-error'
+          : 'request-error'
+  const isApiError = axios.isAxiosError(cause)
+  const requestTimedOut =
+    isApiError
+    && (cause.code === 'ECONNABORTED' || cause.code === 'ETIMEDOUT')
+
+  const error = detail?.message
+    || (requestTimedOut
+        ? 'The backend request timed out. The database status is unknown.'
+        : isApiError && !cause.response
+          ? 'The backend API could not be reached.'
+          : 'The backend could not complete taxpayer verification.')
+
+  verificationProgress.value = {
+    ...progress,
+    stage,
+    error,
+  }
+}
+
+function updateVerificationProgress(updates: Partial<VerificationProgress>) {
+  const progress = verificationProgress.value
+  if (progress) verificationProgress.value = { ...progress, ...updates }
+}
+
+function getApiErrorDetail(
+  cause: unknown,
+): (ApiErrorDetail & { message?: string }) | null {
+  if (!axios.isAxiosError<{ detail?: ApiErrorDetail | string }>(cause)) {
+    return null
+  }
+  const detail = cause.response?.data?.detail
+  if (typeof detail === 'string') return { message: detail }
+  return detail && typeof detail === 'object' ? detail : null
+}
+
+function verificationStepClass(index: number): string {
+  switch (verificationProgress.value?.stage) {
+    case 'connecting':
+      return index === 0 ? 'is-active' : ''
+    case 'querying':
+      return index === 0 ? 'is-complete' : 'is-active'
+    case 'completed':
+      return 'is-complete'
+    case 'connection-error':
+      return index === 0 ? 'is-failed' : ''
+    case 'query-error':
+      return index === 0 ? 'is-complete' : 'is-failed'
+    default:
+      return ''
+  }
+}
+
+function closeVerificationModal() {
+  if (!isVerificationInProgress.value) verificationProgress.value = null
 }
 
 async function reviewMatch(

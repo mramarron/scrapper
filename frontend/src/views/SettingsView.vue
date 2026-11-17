@@ -137,6 +137,8 @@ const errorTitles: Record<NonNullable<ScrapeRun['error_code']>, string> = {
   upstream_request_failed: 'Could not load Mthandizi page',
   directory_empty: 'No business profiles found',
   taxpayer_database_not_configured: 'Taxpayer database is not configured',
+  taxpayer_database_connection_error: 'Could not connect to taxpayer database',
+  taxpayer_database_query_error: 'Taxpayer database query failed',
   taxpayer_database_error: 'Taxpayer database verification failed',
   storage_error: 'Could not save scraper results',
   worker_unavailable: 'Scraper could not start',

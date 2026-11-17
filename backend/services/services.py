@@ -11,6 +11,7 @@ from backend.services.mthandizi_parser import (
 )
 from backend.services.mthandizi_repository import MthandiziLeadRepository
 from backend.services.taxpayer_verification import (
+    TaxpayerDatabaseConnectionError,
     TaxpayerDatabaseNotConfiguredError,
     TaxpayerDatabaseQueryError,
 )
@@ -211,10 +212,15 @@ def describe_scrape_error(error: Exception) -> tuple[str, str]:
             "taxpayer_database_not_configured",
             "Taxpayer verification needs a configured SQL Server connection.",
         )
+    if isinstance(error, TaxpayerDatabaseConnectionError):
+        return (
+            "taxpayer_database_connection_error",
+            "Could not connect to the taxpayer SQL Server.",
+        )
     if isinstance(error, TaxpayerDatabaseQueryError):
         return (
-            "taxpayer_database_error",
-            "The taxpayer SQL Server could not complete verification.",
+            "taxpayer_database_query_error",
+            "The connection succeeded, but the taxpayer query failed.",
         )
     if isinstance(error, SQLAlchemyError):
         return (

@@ -20,6 +20,10 @@ class TaxpayerDatabaseNotConfiguredError(RuntimeError):
     pass
 
 
+class TaxpayerDatabaseConnectionError(RuntimeError):
+    pass
+
+
 class TaxpayerDatabaseQueryError(RuntimeError):
     pass
 
@@ -38,21 +42,21 @@ class TaxpayerCandidateNoLongerMatchesError(ValueError):
 
 class MthandiziBusinessVerificationService:
     CANDIDATE_QUERY = text(
-        """
-        SELECT [ID], [BUSINESSNAME]
-        FROM [dbo].[EIS_Taxpayers_1]
-        WHERE LOWER(LTRIM(RTRIM([EMAILADDRESS]))) = LOWER(:email)
-          AND LOWER([BUSINESSNAME]) LIKE :name_pattern ESCAPE '\\'
-        ORDER BY [BUSINESSNAME], [ID]
+        r"""
+        SELECT [Id] AS [ID], [BusinessName] AS [BUSINESSNAME]
+        FROM [dbo].[Taxpayers]
+        WHERE LOWER(LTRIM(RTRIM([EmailAddress]))) = LOWER(:email)
+          AND LOWER([BusinessName]) LIKE :name_pattern ESCAPE '\'
+        ORDER BY [BusinessName], [Id]
         """
     )
     APPROVAL_QUERY = text(
-        """
+        r"""
         SELECT [TIN]
-        FROM [dbo].[EIS_Taxpayers_1]
-        WHERE [ID] = :taxpayer_record_id
-          AND LOWER(LTRIM(RTRIM([EMAILADDRESS]))) = LOWER(:email)
-          AND LOWER([BUSINESSNAME]) LIKE :name_pattern ESCAPE '\\'
+        FROM [dbo].[Taxpayers]
+        WHERE [Id] = :taxpayer_record_id
+          AND LOWER(LTRIM(RTRIM([EmailAddress]))) = LOWER(:email)
+          AND LOWER([BusinessName]) LIKE :name_pattern ESCAPE '\'
         """
     )
 
@@ -170,6 +174,20 @@ class MthandiziBusinessVerificationService:
             )
         return self.taxpayer_session_factory
 
+    def check_connection(self) -> None:
+        session_factory = self._require_taxpayer_session()
+        try:
+            with session_factory() as session:
+                session.connection()
+        except SQLAlchemyError as error:
+            logger.error(
+                "Taxpayer SQL Server connection failed (%s).",
+                type(error).__name__,
+            )
+            raise TaxpayerDatabaseConnectionError(
+                "Could not connect to the taxpayer SQL Server."
+            ) from error
+
     @staticmethod
     def _execute(
         session_factory: sessionmaker[Session],
@@ -178,15 +196,42 @@ class MthandiziBusinessVerificationService:
     ) -> list[Any]:
         try:
             with session_factory() as session:
-                return session.execute(statement, parameters).mappings().all()
+                try:
+                    session.connection()
+                except SQLAlchemyError as error:
+                    logger.error(
+                        "Taxpayer SQL Server connection failed (%s).",
+                        type(error).__name__,
+                    )
+                    raise TaxpayerDatabaseConnectionError(
+                        "Could not connect to the taxpayer SQL Server."
+                    ) from error
+
+                try:
+                    return session.execute(
+                        statement, parameters
+                    ).mappings().all()
+                except SQLAlchemyError as error:
+                    logger.error(
+                        "Taxpayer SQL Server query failed (%s).",
+                        type(error).__name__,
+                    )
+                    raise TaxpayerDatabaseQueryError(
+                        "The taxpayer SQL Server query failed."
+                    ) from error
+        except (
+            TaxpayerDatabaseConnectionError,
+            TaxpayerDatabaseQueryError,
+        ):
+            raise
         except SQLAlchemyError as error:
             logger.error(
-                "Taxpayer SQL Server query failed (%s).",
+                "Taxpayer SQL Server connection failed (%s).",
                 type(error).__name__,
             )
-            raise TaxpayerDatabaseQueryError(
-                "The taxpayer SQL Server query failed."
-            ) from None
+            raise TaxpayerDatabaseConnectionError(
+                "Could not connect to the taxpayer SQL Server."
+            ) from error
 
 
 def _name_contains_pattern(business_name: str) -> str:

@@ -58,6 +58,8 @@ export interface ScrapeRun {
     | "upstream_request_failed"
     | "directory_empty"
     | "taxpayer_database_not_configured"
+    | "taxpayer_database_connection_error"
+    | "taxpayer_database_query_error"
     | "taxpayer_database_error"
     | "storage_error"
     | "worker_unavailable"
@@ -84,6 +86,11 @@ export interface ScrapeRun {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+}
+
+export interface ApiErrorDetail {
+  code?: string;
+  message?: string;
 }
 
 export default api;

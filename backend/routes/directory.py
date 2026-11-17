@@ -30,6 +30,7 @@ from ..services.taxpayer_verification import (
     MthandiziBusinessVerificationService,
     TaxpayerCandidateNoLongerMatchesError,
     TaxpayerCandidateNotFoundError,
+    TaxpayerDatabaseConnectionError,
     TaxpayerDatabaseNotConfiguredError,
     TaxpayerDatabaseQueryError,
 )
@@ -149,6 +150,21 @@ def list_businesses() -> list[BusinessResponse]:
         return [serialize_business(business) for business in businesses]
 
 
+@router.get("/taxpayer-database/connection/")
+def check_taxpayer_database_connection() -> dict[str, bool]:
+    verification = MthandiziBusinessVerificationService(
+        SessionLocal, MSSQLSessionLocal
+    )
+    try:
+        verification.check_connection()
+    except (
+        TaxpayerDatabaseNotConfiguredError,
+        TaxpayerDatabaseConnectionError,
+    ) as error:
+        _raise_verification_http_error(error)
+    return {"connected": True}
+
+
 @router.post(
     "/businesses/{business_id}/verify/",
     response_model=BusinessResponse,
@@ -162,6 +178,7 @@ def verify_business_taxpayers(business_id: int) -> BusinessResponse:
     except (
         MthandiziBusinessNotFoundError,
         TaxpayerDatabaseNotConfiguredError,
+        TaxpayerDatabaseConnectionError,
         TaxpayerDatabaseQueryError,
     ) as error:
         _raise_verification_http_error(error)
@@ -183,6 +200,7 @@ def approve_business_taxpayer_match(
     except (
         TaxpayerCandidateNotFoundError,
         TaxpayerCandidateNoLongerMatchesError,
+        TaxpayerDatabaseConnectionError,
         TaxpayerDatabaseNotConfiguredError,
         TaxpayerDatabaseQueryError,
         TaxpayerMatchAlreadyReviewedError,
@@ -241,13 +259,33 @@ def _raise_verification_http_error(error: Exception) -> None:
     if isinstance(error, TaxpayerDatabaseNotConfiguredError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            detail={
+                "code": "taxpayer_database_not_configured",
+                "message": str(error),
+            },
+        ) from error
+    if isinstance(error, TaxpayerDatabaseConnectionError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "taxpayer_connection_error",
+                "message": (
+                    "Could not connect to SQL Server. Check that the local "
+                    "instance is running and accessible."
+                ),
+            },
         ) from error
     if isinstance(error, TaxpayerDatabaseQueryError):
         logger.exception("Taxpayer database verification failed.")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "taxpayer_query_error",
+                "message": (
+                    "The taxpayer lookup query failed. Check the table schema "
+                    "and read permissions."
+                ),
+            },
         ) from error
     raise error
 

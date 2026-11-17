@@ -913,6 +913,75 @@ p {
   font-weight: 700;
 }
 
+.verification-modal-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #17231dcc;
+  padding: 20px;
+}
+
+.verification-modal {
+  width: min(460px, 100%);
+  border: 1px solid #e5ebe6;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px #101a1533;
+  padding: 26px;
+}
+
+.verification-modal h2 {
+  margin: 8px 0 0;
+  color: #23322c;
+  font-family: Manrope, sans-serif;
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.5px;
+}
+
+.verification-modal .scrape-progress {
+  margin-top: 24px;
+}
+
+.verification-modal .scrape-progress-step {
+  min-height: 42px;
+  font-size: 12px;
+}
+
+.verification-modal-status {
+  margin: 8px 0 0;
+  color: #536159;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.verification-modal-status.is-completed {
+  color: #367553;
+}
+
+.verification-modal-status.is-connection-error,
+.verification-modal-status.is-query-error,
+.verification-modal-status.is-configuration-error,
+.verification-modal-status.is-request-error {
+  color: #8b443b;
+}
+
+.verification-modal-error {
+  border-radius: 8px;
+  background: #fbf0ee;
+  color: #8b443b;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+}
+
+.verification-modal-close {
+  margin-top: 20px;
+}
+
 .scrape-status-completed .scrape-status-copy > span {
   color: #6d947a;
 }
