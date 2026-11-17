@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, JSON, Numeric
-from sqlalchemy import String, Text, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON
+from sqlalchemy import Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy import Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.config.database import Base
 
@@ -56,6 +56,37 @@ class MthandiziBusinessLead(Base):
     matched_tin: Mapped[str | None] = mapped_column(String(50))
     scraped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    taxpayer_matches: Mapped[list["MthandiziBusinessTaxpayerMatch"]] = relationship(
+        back_populates="business",
+        cascade="all, delete-orphan",
+    )
+
+
+class MthandiziBusinessTaxpayerMatch(Base):
+    __tablename__ = "app_scrap_mthandizibusinesstaxpayermatch"
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id",
+            "taxpayer_record_id",
+            name="uq_mthandizi_taxpayer_match",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(
+        ForeignKey("app_scrap_mthandizibusinesslead.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    taxpayer_record_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    taxpayer_business_name: Mapped[str] = mapped_column(
+        String(255), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False
+    )
+    business: Mapped[MthandiziBusinessLead] = relationship(
+        back_populates="taxpayer_matches"
     )
 
 

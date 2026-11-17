@@ -544,6 +544,12 @@ p {
   text-underline-offset: 2px;
 }
 
+.notice-success {
+  border-color: #d7e9dc;
+  background: #f3faf5;
+  color: #38724f;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -905,6 +911,75 @@ p {
   background: #f7e1dc;
   font-size: 10px;
   font-weight: 700;
+}
+
+.verification-modal-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #17231dcc;
+  padding: 20px;
+}
+
+.verification-modal {
+  width: min(460px, 100%);
+  border: 1px solid #e5ebe6;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px #101a1533;
+  padding: 26px;
+}
+
+.verification-modal h2 {
+  margin: 8px 0 0;
+  color: #23322c;
+  font-family: Manrope, sans-serif;
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.5px;
+}
+
+.verification-modal .scrape-progress {
+  margin-top: 24px;
+}
+
+.verification-modal .scrape-progress-step {
+  min-height: 42px;
+  font-size: 12px;
+}
+
+.verification-modal-status {
+  margin: 8px 0 0;
+  color: #536159;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.verification-modal-status.is-completed {
+  color: #367553;
+}
+
+.verification-modal-status.is-connection-error,
+.verification-modal-status.is-query-error,
+.verification-modal-status.is-configuration-error,
+.verification-modal-status.is-request-error {
+  color: #8b443b;
+}
+
+.verification-modal-error {
+  border-radius: 8px;
+  background: #fbf0ee;
+  color: #8b443b;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+}
+
+.verification-modal-close {
+  margin-top: 20px;
 }
 
 .scrape-status-completed .scrape-status-copy > span {
@@ -1547,6 +1622,96 @@ p {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.taxpayer-review {
+  margin-top: 11px;
+  border-top: 1px solid #f0f2f0;
+  padding-top: 10px;
+}
+
+.taxpayer-review-heading,
+.taxpayer-match > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.taxpayer-review-label {
+  margin: 0 0 4px;
+  color: #929c95;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.taxpayer-review-status {
+  margin: 0;
+  color: #53645a;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.taxpayer-verify-button,
+.taxpayer-match-actions .button {
+  min-height: 28px;
+  gap: 5px;
+  font-size: 9px;
+  padding: 0 9px;
+}
+
+.taxpayer-match-list {
+  display: grid;
+  gap: 7px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taxpayer-match {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid #f0f2f0;
+  padding-top: 7px;
+}
+
+.taxpayer-match strong {
+  overflow: hidden;
+  color: #53645a;
+  font-size: 9px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.taxpayer-match-status {
+  flex: 0 0 auto;
+  color: #8a938d;
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.taxpayer-match-status.is-approved {
+  color: #38724f;
+}
+
+.taxpayer-match-status.is-rejected {
+  color: #8b443b;
+}
+
+.taxpayer-match-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.taxpayer-reject-button {
+  border: 1px solid #e6e9e6;
+  background: #fff;
+  color: #68756d;
+}
+
+.taxpayer-reject-button:hover:not(:disabled) {
+  background: #f7f8f7;
 }
 
 .no-contact {

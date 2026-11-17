@@ -6,8 +6,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
-from ..config.database import SessionLocal
+from ..config.database import MSSQLSessionLocal, SessionLocal
 from ..models.models import (
     MthandiziBusinessLead,
     MthandiziScrapeRun,
@@ -23,6 +24,16 @@ from ..schemas.schemas import (
     serialize_scrape_run,
 )
 from ..services.services import MthandiziScraperService, describe_scrape_error
+from ..services.mthandizi_repository import TaxpayerMatchAlreadyReviewedError
+from ..services.taxpayer_verification import (
+    MthandiziBusinessNotFoundError,
+    MthandiziBusinessVerificationService,
+    TaxpayerCandidateNoLongerMatchesError,
+    TaxpayerCandidateNotFoundError,
+    TaxpayerDatabaseConnectionError,
+    TaxpayerDatabaseNotConfiguredError,
+    TaxpayerDatabaseQueryError,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +84,21 @@ def _execute_mthandizi_scrape(run_id: str) -> None:
             f"{processed_product_count - created_product_count} existing "
             "products."
         )
+        persist_progress(
+            {
+                "stage": "verifying_businesses",
+                "message": "Checking businesses against the taxpayer database",
+            }
+        )
+        verified_count, match_count = (
+            MthandiziBusinessVerificationService(
+                SessionLocal, MSSQLSessionLocal
+            ).verify_all(progress_callback=persist_progress)
+        )
+        output.write(
+            f" Verified {verified_count} businesses against the taxpayer "
+            f"database; found {match_count} candidate matches for review."
+        )
         final_status = "completed"
         error_code = ""
         error_message = ""
@@ -118,10 +144,150 @@ def list_businesses() -> list[BusinessResponse]:
     with SessionLocal() as session:
         businesses = session.scalars(
             select(MthandiziBusinessLead)
+            .options(selectinload(MthandiziBusinessLead.taxpayer_matches))
             .order_by(MthandiziBusinessLead.scraped_at.desc())
-            .limit(50)
         ).all()
         return [serialize_business(business) for business in businesses]
+
+
+@router.get("/taxpayer-database/connection/")
+def check_taxpayer_database_connection() -> dict[str, bool]:
+    verification = MthandiziBusinessVerificationService(
+        SessionLocal, MSSQLSessionLocal
+    )
+    try:
+        verification.check_connection()
+    except (
+        TaxpayerDatabaseNotConfiguredError,
+        TaxpayerDatabaseConnectionError,
+    ) as error:
+        _raise_verification_http_error(error)
+    return {"connected": True}
+
+
+@router.post(
+    "/businesses/{business_id}/verify/",
+    response_model=BusinessResponse,
+)
+def verify_business_taxpayers(business_id: int) -> BusinessResponse:
+    verification = MthandiziBusinessVerificationService(
+        SessionLocal, MSSQLSessionLocal
+    )
+    try:
+        verification.verify_business(business_id)
+    except (
+        MthandiziBusinessNotFoundError,
+        TaxpayerDatabaseNotConfiguredError,
+        TaxpayerDatabaseConnectionError,
+        TaxpayerDatabaseQueryError,
+    ) as error:
+        _raise_verification_http_error(error)
+    return _load_business_response(business_id)
+
+
+@router.post(
+    "/businesses/{business_id}/matches/{match_id}/approve/",
+    response_model=BusinessResponse,
+)
+def approve_business_taxpayer_match(
+    business_id: int, match_id: int
+) -> BusinessResponse:
+    verification = MthandiziBusinessVerificationService(
+        SessionLocal, MSSQLSessionLocal
+    )
+    try:
+        verification.approve_candidate(business_id, match_id)
+    except (
+        TaxpayerCandidateNotFoundError,
+        TaxpayerCandidateNoLongerMatchesError,
+        TaxpayerDatabaseConnectionError,
+        TaxpayerDatabaseNotConfiguredError,
+        TaxpayerDatabaseQueryError,
+        TaxpayerMatchAlreadyReviewedError,
+    ) as error:
+        _raise_verification_http_error(error)
+    return _load_business_response(business_id)
+
+
+@router.post(
+    "/businesses/{business_id}/matches/{match_id}/reject/",
+    response_model=BusinessResponse,
+)
+def reject_business_taxpayer_match(
+    business_id: int, match_id: int
+) -> BusinessResponse:
+    verification = MthandiziBusinessVerificationService(
+        SessionLocal, MSSQLSessionLocal
+    )
+    try:
+        verification.reject_candidate(business_id, match_id)
+    except (
+        TaxpayerCandidateNotFoundError,
+        TaxpayerMatchAlreadyReviewedError,
+    ) as error:
+        _raise_verification_http_error(error)
+    return _load_business_response(business_id)
+
+
+def _load_business_response(business_id: int) -> BusinessResponse:
+    with SessionLocal() as session:
+        business = session.scalar(
+            select(MthandiziBusinessLead)
+            .options(selectinload(MthandiziBusinessLead.taxpayer_matches))
+            .where(MthandiziBusinessLead.id == business_id)
+        )
+        if business is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return serialize_business(business)
+
+
+def _raise_verification_http_error(error: Exception) -> None:
+    if isinstance(error, MthandiziBusinessNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    if isinstance(error, TaxpayerCandidateNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    if isinstance(error, TaxpayerCandidateNoLongerMatchesError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    if isinstance(error, TaxpayerMatchAlreadyReviewedError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    if isinstance(error, TaxpayerDatabaseNotConfiguredError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "taxpayer_database_not_configured",
+                "message": str(error),
+            },
+        ) from error
+    if isinstance(error, TaxpayerDatabaseConnectionError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "taxpayer_connection_error",
+                "message": (
+                    "Could not connect to SQL Server. Check that the local "
+                    "instance is running and accessible."
+                ),
+            },
+        ) from error
+    if isinstance(error, TaxpayerDatabaseQueryError):
+        logger.exception("Taxpayer database verification failed.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "taxpayer_query_error",
+                "message": (
+                    "The taxpayer lookup query failed. Check the table schema "
+                    "and read permissions."
+                ),
+            },
+        ) from error
+    raise error
 
 
 @router.get("/scrape-mthandizi/")
