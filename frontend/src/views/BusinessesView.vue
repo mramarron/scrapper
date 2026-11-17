@@ -432,7 +432,14 @@ function verificationButtonLabel(business: BusinessLead): string {
 }
 
 function getInitials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join('').toLocaleUpperCase()
+  return name
+  .trim()
+  .split(/[\s_]+/)
+  .filter(Boolean)
+  .map((part) => part.charAt(0))
+  .join('')
+  .toLocaleUpperCase();
+
 }
 
 onMounted(loadBusinesses)
