@@ -16,7 +16,6 @@ from backend.services.taxpayer_verification import (
     MthandiziBusinessVerificationService,
     TaxpayerDatabaseConnectionError,
     TaxpayerDatabaseQueryError,
-    _name_contains_pattern,
 )
 from backend.routes.directory import _raise_verification_http_error
 
@@ -68,6 +67,7 @@ class FakeSession:
 class FakeTaxpayerDatabase:
     def __init__(self) -> None:
         self.statements = []
+        self.parameters = []
 
     def __call__(self):
         return self
@@ -81,8 +81,9 @@ class FakeTaxpayerDatabase:
     def connection(self):
         return None
 
-    def execute(self, statement, _parameters):
+    def execute(self, statement, parameters):
         self.statements.append(str(statement))
+        self.parameters.append(parameters)
         rows = (
             [{"TIN": "TIN-12345"}]
             if "[TIN]" in str(statement)
@@ -103,9 +104,7 @@ class TaxpayerVerificationTests(unittest.TestCase):
         )
 
         with self.assertRaises(TaxpayerDatabaseConnectionError):
-            verification._find_candidates(
-                "Example Trading", "owner@example.com"
-            )
+            verification._find_candidates("owner@example.com")
 
         self.assertEqual(database.connection_calls, 1)
         self.assertEqual(database.execute_calls, 0)
@@ -121,9 +120,7 @@ class TaxpayerVerificationTests(unittest.TestCase):
         )
 
         with self.assertRaises(TaxpayerDatabaseQueryError):
-            verification._find_candidates(
-                "Example Trading", "owner@example.com"
-            )
+            verification._find_candidates("owner@example.com")
 
         self.assertEqual(database.connection_calls, 1)
         self.assertEqual(database.execute_calls, 1)
@@ -152,15 +149,13 @@ class TaxpayerVerificationTests(unittest.TestCase):
             "taxpayer_query_error",
         )
 
-    def test_candidate_lookup_requires_exact_email_and_does_not_read_tin(self):
+    def test_candidate_lookup_uses_email_only_and_does_not_read_tin(self):
         taxpayer_session = FakeSession()
         verification = MthandiziBusinessVerificationService(
             sessionmaker(), lambda: taxpayer_session
         )
 
-        candidates = verification._find_candidates(
-            "Example Trading", "owner@example.com"
-        )
+        candidates = verification._find_candidates("owner@example.com")
 
         self.assertEqual(candidates, [("42", "Example Trading")])
         self.assertIn("FROM [dbo].[Taxpayers]", str(taxpayer_session.statement))
@@ -171,13 +166,11 @@ class TaxpayerVerificationTests(unittest.TestCase):
         )
         self.assertIn("[EmailAddress]", str(taxpayer_session.statement))
         self.assertIn("[BUSINESSNAME]", str(taxpayer_session.statement))
+        self.assertNotIn("LIKE :name_pattern", str(taxpayer_session.statement))
         self.assertNotIn("[TIN]", str(taxpayer_session.statement))
         self.assertEqual(
             taxpayer_session.parameters,
-            {
-                "email": "owner@example.com",
-                "name_pattern": "%example trading%",
-            },
+            {"email": "owner@example.com"},
         )
 
     def test_tin_is_loaded_and_saved_only_after_candidate_approval(self):
@@ -191,7 +184,7 @@ class TaxpayerVerificationTests(unittest.TestCase):
         app_session_factory = sessionmaker(bind=engine, expire_on_commit=False)
         with app_session_factory() as session:
             business = MthandiziBusinessLead(
-                business_name="Example Business",
+                business_name="A different business name",
                 email="owner@example.com",
                 profile_url="https://mthandizi.com/partners/example-business",
             )
@@ -219,6 +212,11 @@ class TaxpayerVerificationTests(unittest.TestCase):
 
         self.assertNotIn("[TIN]", taxpayer_database.statements[0])
         self.assertIn("FROM [dbo].[Taxpayers]", taxpayer_database.statements[0])
+        self.assertNotIn("LIKE :name_pattern", taxpayer_database.statements[0])
+        self.assertEqual(
+            taxpayer_database.parameters[0],
+            {"email": "owner@example.com"},
+        )
         verification.approve_candidate(business_id, candidate_id)
 
         with app_session_factory() as session:
@@ -229,11 +227,10 @@ class TaxpayerVerificationTests(unittest.TestCase):
 
         self.assertIn("[TIN]", taxpayer_database.statements[1])
         self.assertIn("FROM [dbo].[Taxpayers]", taxpayer_database.statements[1])
-
-    def test_name_search_escapes_sql_like_wildcards(self):
+        self.assertNotIn("LIKE :name_pattern", taxpayer_database.statements[1])
         self.assertEqual(
-            _name_contains_pattern(" A_%[B]\\ "),
-            r"%a\_\%\[b]\\%",
+            taxpayer_database.parameters[1],
+            {"taxpayer_record_id": "42", "email": "owner@example.com"},
         )
 
 
