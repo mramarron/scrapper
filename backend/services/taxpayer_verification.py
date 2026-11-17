@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import Any, Callable
 
 from sqlalchemy import text
@@ -46,7 +45,6 @@ class MthandiziBusinessVerificationService:
         SELECT [Id] AS [ID], [BusinessName] AS [BUSINESSNAME]
         FROM [dbo].[Taxpayers]
         WHERE LOWER(LTRIM(RTRIM([EmailAddress]))) = LOWER(:email)
-          AND LOWER([BusinessName]) LIKE :name_pattern ESCAPE '\'
         ORDER BY [BusinessName], [Id]
         """
     )
@@ -56,7 +54,6 @@ class MthandiziBusinessVerificationService:
         FROM [dbo].[Taxpayers]
         WHERE [Id] = :taxpayer_record_id
           AND LOWER(LTRIM(RTRIM([EmailAddress]))) = LOWER(:email)
-          AND LOWER([BusinessName]) LIKE :name_pattern ESCAPE '\'
         """
     )
 
@@ -74,8 +71,8 @@ class MthandiziBusinessVerificationService:
             raise MthandiziBusinessNotFoundError(
                 f"Business {business_id} was not found."
             )
-        business_name, email = target
-        candidates = self._find_candidates(business_name, email)
+        _, email = target
+        candidates = self._find_candidates(email)
         self.repository.save_taxpayer_candidates(business_id, candidates)
         return len(candidates)
 
@@ -87,7 +84,7 @@ class MthandiziBusinessVerificationService:
         for index, (business_id, business_name, email) in enumerate(
             targets, start=1
         ):
-            candidates = self._find_candidates(business_name, email)
+            candidates = self._find_candidates(email)
             self.repository.save_taxpayer_candidates(business_id, candidates)
             matches_found += len(candidates)
             if progress_callback:
@@ -111,10 +108,8 @@ class MthandiziBusinessVerificationService:
             raise TaxpayerCandidateNotFoundError(
                 f"Taxpayer candidate {match_id} was not found."
             )
-        business_name, email, taxpayer_record_id = candidate
-        tin = self._find_approved_tin(
-            taxpayer_record_id, business_name, email
-        )
+        _, email, taxpayer_record_id = candidate
+        tin = self._find_approved_tin(taxpayer_record_id, email)
         if not tin:
             raise TaxpayerCandidateNoLongerMatchesError(
                 "The taxpayer record no longer matches this business."
@@ -130,17 +125,12 @@ class MthandiziBusinessVerificationService:
                 f"Taxpayer candidate {match_id} was not found."
             )
 
-    def _find_candidates(
-        self, business_name: str, email: str
-    ) -> list[tuple[str, str]]:
+    def _find_candidates(self, email: str) -> list[tuple[str, str]]:
         session_factory = self._require_taxpayer_session()
-        if not business_name.strip() or not email.strip():
+        if not email.strip():
             return []
 
-        statement_parameters = {
-            "email": email.strip(),
-            "name_pattern": _name_contains_pattern(business_name),
-        }
+        statement_parameters = {"email": email.strip()}
         rows = self._execute(
             session_factory, self.CANDIDATE_QUERY, statement_parameters
         )
@@ -151,7 +141,7 @@ class MthandiziBusinessVerificationService:
         ]
 
     def _find_approved_tin(
-        self, taxpayer_record_id: str, business_name: str, email: str
+        self, taxpayer_record_id: str, email: str
     ) -> str | None:
         session_factory = self._require_taxpayer_session()
         rows = self._execute(
@@ -160,7 +150,6 @@ class MthandiziBusinessVerificationService:
             {
                 "taxpayer_record_id": taxpayer_record_id,
                 "email": email.strip(),
-                "name_pattern": _name_contains_pattern(business_name),
             },
         )
         if not rows or rows[0]["TIN"] is None:
@@ -232,14 +221,3 @@ class MthandiziBusinessVerificationService:
             raise TaxpayerDatabaseConnectionError(
                 "Could not connect to the taxpayer SQL Server."
             ) from error
-
-
-def _name_contains_pattern(business_name: str) -> str:
-    normalized_name = " ".join(business_name.split()).casefold()
-    escaped_name = (
-        normalized_name.replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
-        .replace("[", "\\[")
-    )
-    return f"%{escaped_name}%"
