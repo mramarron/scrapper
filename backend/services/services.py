@@ -25,7 +25,7 @@ class MthandiziDirectoryEmptyError(ValueError):
 
 
 class MthandiziScraperService:
-    REQUEST_TIMEOUT_SECONDS = 60
+    REQUEST_TIMEOUT_SECONDS = 200
     PROFILE_FETCH_WORKERS = 5
 
     def __init__(
