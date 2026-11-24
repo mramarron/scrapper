@@ -40,75 +40,112 @@
         </div>
         <div v-if="loading && !hasLoaded" class="loading-state" role="status"><span class="spinner"></span> Loading businesses…</div>
         <div v-else-if="error && !hasLoaded" class="empty-state">Businesses are unavailable until the directory connection is restored.</div>
-        <div v-else-if="filteredBusinesses.length" class="business-grid">
-          <article v-for="business in filteredBusinesses" :key="business.id" class="business-card">
-            <div class="business-card-top">
-              <span class="record-avatar business-avatar" aria-hidden="true">{{ getInitials(business.business_name) }}</span>
-              <span class="verified-badge"><span aria-hidden="true">✓</span> Listed</span>
-            </div>
-            <p class="business-category">{{ business.category || 'Local business' }}</p>
-            <h3>{{ business.business_name }}</h3>
-            <p class="business-location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2" /></svg>{{ business.location || 'Malawi' }}</p>
-            <div class="business-card-footer">
-              <a v-if="business.phone_number" :href="`tel:${business.phone_number}`">{{ business.phone_number }}</a>
-              <span v-else class="no-contact">Contact details unavailable</span>
-              <a v-if="business.email" class="business-email" :href="`mailto:${business.email}`" :aria-label="`Email ${business.business_name}`">Email</a>
-              <a class="business-external" :href="business.profile_url" target="_blank" rel="noopener noreferrer" :aria-label="`View ${business.business_name} profile`"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg></a>
-            </div>
-            <section
-              class="taxpayer-review"
-              :aria-label="`Taxpayer verification for ${business.business_name}`"
+        <div
+  v-else-if="filteredBusinesses.length"
+  class="w-full overflow-x-auto rounded-xl border border-gray-200 bg-white"
+>
+  <table class="w-full border-collapse text-left text-sm">
+    <thead>
+      <tr class="border-b border-gray-200 bg-gray-50/80 text-xs font-semibold uppercase tracking-wider text-gray-500">
+        <th scope="col" class="px-4 py-3 whitespace-nowrap">Business</th>
+        <th scope="col" class="px-4 py-3 whitespace-nowrap">Location</th>
+        <th scope="col" class="px-4 py-3 whitespace-nowrap">Verification</th>
+        <th scope="col" class="px-4 py-3 text-right whitespace-nowrap">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <tr
+        v-for="business in filteredBusinesses"
+        :key="business.id"
+        class="transition-colors hover:bg-gray-50/70"
+      >
+        <!-- Business & Category -->
+        <td class="px-4 py-3.5 align-middle">
+          <div class="flex items-center gap-3">
+            <span
+              class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-900"
+              aria-hidden="true"
             >
-              <div class="taxpayer-review-heading">
-                <div>
-                  <p class="taxpayer-review-label">TAXPAYER VERIFICATION</p>
-                  <p class="taxpayer-review-status">{{ verificationSummary(business) }}</p>
-                </div>
-                <button
-                  class="button button-primary taxpayer-verify-button"
-                  type="button"
-                  :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
-                  @click="verifyBusiness(business.id)"
-                >
-                  {{ verificationButtonLabel(business) }}
-                </button>
-              </div>
-              <ul v-if="business.taxpayer_matches.length" class="taxpayer-match-list">
-                <li
-                  v-for="match in business.taxpayer_matches"
-                  :key="match.id"
-                  class="taxpayer-match"
-                >
-                  <div>
-                    <strong>{{ match.taxpayer_business_name }}</strong>
-                    <span
-                      class="taxpayer-match-status"
-                      :class="`is-${match.status}`"
-                    >{{ match.status }}</span>
-                  </div>
-                  <div v-if="match.status === 'pending'" class="taxpayer-match-actions">
-                    <button
-                      class="button button-primary"
-                      type="button"
-                      :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
-                      @click="reviewMatch(business.id, match.id, 'approve')"
-                    >
-                      {{ reviewingMatchId === match.id ? 'Saving…' : 'Approve' }}
-                    </button>
-                    <button
-                      class="button taxpayer-reject-button"
-                      type="button"
-                      :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
-                      @click="reviewMatch(business.id, match.id, 'reject')"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </li>
-              </ul>
-            </section>
-          </article>
-        </div>
+              {{ getInitials(business.business_name) }}
+            </span>
+            <div class="flex min-w-0 flex-col">
+              <span class="truncate font-semibold text-gray-900">
+                {{ business.business_name }}
+              </span>
+              <span class="truncate text-xs text-gray-500">
+                {{ business.category || 'Local business' }}
+              </span>
+            </div>
+          </div>
+        </td>
+
+        <!-- Location -->
+        <td class="px-4 py-3.5 align-middle whitespace-nowrap text-gray-600">
+          {{ business.location || 'Malawi' }}
+        </td>
+
+        <!-- Verification Status -->
+        <td class="px-4 py-3.5 align-middle whitespace-nowrap">
+          <span
+            class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium"
+            :class="
+              business.taxpayer_matches?.some((m) => m.status === 'pending')
+                ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
+                : 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
+            "
+          >
+            {{ verificationSummary(business) }}
+          </span>
+        </td>
+
+        <!-- Actions -->
+        <td class="px-4 py-3.5 text-right align-middle whitespace-nowrap">
+          <div class="inline-flex items-center justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+              @click="()=>{}"
+            >
+              View
+            </button>
+
+            <button
+              type="button"
+              class="rounded-lg bg-gray-300 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="verifyingBusinessId !== null || reviewingMatchId !== null"
+              @click="verifyBusiness(business.id)"
+            >
+              {{ verificationButtonLabel(business) }}
+            </button>
+
+            <a
+              v-if="business.profile_url"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
+              :href="business.profile_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              :aria-label="`Open ${business.business_name} profile`"
+              title="External profile"
+            >
+              <svg
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M7 17 17 7M8 7h9v9" />
+              </svg>
+            </a>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
         <div v-else class="empty-state">{{ searchQuery ? `No businesses match “${searchQuery}”. Try another search.` : 'No businesses have been collected yet.' }}</div>
         <p v-if="hasLoaded && businesses.length" class="results-note">
           Showing all {{ businesses.length }} businesses in your local directory.
