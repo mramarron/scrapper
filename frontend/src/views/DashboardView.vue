@@ -133,6 +133,44 @@
         </div>
         <p class="chart-footnote">Latest {{ listings.length + businesses.length }} records across both sources.</p>
       </article>
+
+      <article class="analytics-card source-card">
+        <div class="analytics-heading">
+          <div>
+            <p class="section-kicker">BUSINESS VERIFICATION</p>
+            <h2>Taxpayer status</h2>
+          </div>
+        </div>
+        <p v-if="loading && !hasLoaded" class="chart-message source-chart-message" role="status">Loading verification status…</p>
+        <p v-else-if="error && !hasLoaded" class="chart-message source-chart-message">Verification status is unavailable until the connection is restored.</p>
+        <p v-else-if="!hasVerificationData" class="chart-message source-chart-message">No businesses to display.</p>
+        <div v-else class="source-chart-content">
+          <ChartContainer
+            :config="verificationChartConfig"
+            class="source-chart-canvas"
+            role="img"
+            :aria-label="verificationChartLabel"
+          >
+            <VisSingleContainer :data="verificationChartData" :height="136">
+              <VisDonut
+                :value="verificationValue"
+                :color="verificationColor"
+                :central-label="String(businesses.length)"
+                central-sub-label="businesses"
+                :arc-width="20"
+                :show-empty-segments="true"
+              />
+            </VisSingleContainer>
+          </ChartContainer>
+          <div class="source-breakdown" aria-label="Businesses by verification status">
+            <div v-for="status in verificationChartData" :key="status.key" class="source-row-heading">
+              <span><i class="source-dot" :style="{ backgroundColor: status.color }"></i>{{ status.label }}</span>
+              <strong>{{ status.count }}</strong>
+            </div>
+          </div>
+        </div>
+        <p class="chart-footnote">Verified businesses have a matched taxpayer identification number.</p>
+      </article>
     </section>
 
     <section class="quick-links" aria-labelledby="explore-title">
@@ -187,6 +225,13 @@ interface SourceSlice {
   color: string
 }
 
+interface VerificationSlice {
+  key: 'verified' | 'pending' | 'notFound'
+  label: string
+  count: number
+  color: string
+}
+
 const activityChartConfig = {
   count: {
     label: 'Records',
@@ -202,6 +247,21 @@ const sourceChartConfig = {
   businesses: {
     label: 'Businesses',
     color: '#9482bd',
+  },
+} satisfies ChartConfig
+
+const verificationChartConfig = {
+  verified: {
+    label: 'Verified',
+    color: '#56a176',
+  },
+  pending: {
+    label: 'Pending',
+    color: '#e4aa4f',
+  },
+  notFound: {
+    label: 'Not found',
+    color: '#d27b78',
   },
 } satisfies ChartConfig
 
@@ -274,6 +334,54 @@ const hasSourceData = computed(() => sourceChartData.value.some((source) => sour
 const sourceChartLabel = computed(() =>
   `Directory mix: ${sourceChartData.value.map((source) => `${source.label}, ${source.count}`).join('; ')}`,
 )
+const verificationChartData = computed<VerificationSlice[]>(() => {
+  const statuses = {
+    verified: 0,
+    pending: 0,
+    notFound: 0,
+  }
+
+  for (const business of businesses.value) {
+    if (business.matched_tin) {
+      statuses.verified += 1
+      continue
+    }
+
+    const hasPendingMatch = business.taxpayer_matches.some(
+      (match) => match.status === 'pending',
+    )
+    if (!business.is_checked || hasPendingMatch) {
+      statuses.pending += 1
+    } else {
+      statuses.notFound += 1
+    }
+  }
+
+  return [
+    {
+      key: 'verified',
+      label: 'Verified',
+      count: statuses.verified,
+      color: verificationChartConfig.verified.color,
+    },
+    {
+      key: 'pending',
+      label: 'Pending',
+      count: statuses.pending,
+      color: verificationChartConfig.pending.color,
+    },
+    {
+      key: 'notFound',
+      label: 'Not found',
+      count: statuses.notFound,
+      color: verificationChartConfig.notFound.color,
+    },
+  ]
+})
+const hasVerificationData = computed(() => businesses.value.length > 0)
+const verificationChartLabel = computed(() =>
+  `Business verification status: ${verificationChartData.value.map((status) => `${status.label}, ${status.count}`).join('; ')}`,
+)
 const activityTooltipTemplate = componentToString(activityChartConfig, ChartTooltipContent, {
   labelFormatter: (timestamp) =>
     new Intl.DateTimeFormat('en-MW', { day: 'numeric', month: 'short' }).format(
@@ -286,6 +394,8 @@ const activityY = (day: ActivityDay) => day.count
 const activityTickFormat = (timestamp: number) => String(new Date(timestamp).getDate())
 const sourceValue = (source: SourceSlice) => source.count
 const sourceColor = (source: SourceSlice) => source.color
+const verificationValue = (status: VerificationSlice) => status.count
+const verificationColor = (status: VerificationSlice) => status.color
 
 function dateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
