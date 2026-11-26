@@ -574,7 +574,7 @@ p {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(250px, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(240px, 1fr));
   gap: 13px;
   margin-bottom: 23px;
 }
@@ -1117,6 +1117,199 @@ p {
 
 .directory-page-panel .directory-section {
   padding-top: 22px;
+}
+
+.business-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.business-detail-panel {
+  padding: 22px;
+}
+
+.business-detail-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 20px;
+}
+
+.business-detail-avatar {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 15px;
+  background: #edf4ef;
+  color: #387454;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.business-detail-identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.business-detail-identity .section-kicker,
+.business-matches-heading .section-kicker {
+  margin-bottom: 5px;
+  color: #849087;
+}
+
+.business-detail-identity h2,
+.business-matches-heading h2 {
+  margin: 0;
+  color: #344239;
+  font-family: Manrope, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.business-detail-identity > p:last-child {
+  margin: 4px 0 0;
+  color: #87918b;
+  font-size: 10px;
+}
+
+.business-verification-badge,
+.business-match-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 5px 9px;
+  text-transform: capitalize;
+}
+
+.business-verification-badge.is-verified,
+.business-match-status.is-approved {
+  background: #eaf5ee;
+  color: #28714d;
+}
+
+.business-verification-badge.is-pending,
+.business-match-status.is-pending {
+  background: #fff5e3;
+  color: #94620f;
+}
+
+.business-verification-badge.is-not-found,
+.business-match-status.is-rejected {
+  background: #fff0ed;
+  color: #a64e43;
+}
+
+.business-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.business-detail-item {
+  min-width: 0;
+  border-top: 1px solid #eff1ef;
+  padding: 13px 10px 12px 0;
+}
+
+.business-detail-item dt {
+  margin-bottom: 5px;
+  color: #89938d;
+  font-size: 9px;
+}
+
+.business-detail-item dd {
+  margin: 0;
+  color: #3e4c43;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.business-detail-item a {
+  color: #286d50;
+  text-decoration: none;
+}
+
+.business-detail-item a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.business-matches-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.business-match-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.business-match-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #eff1ef;
+  padding: 14px 0;
+}
+
+.business-match-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.business-match-row strong {
+  color: #3e4c43;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.business-match-row small {
+  color: #929c95;
+  font-size: 9px;
+}
+
+.business-no-matches,
+.business-detail-empty {
+  margin-bottom: 0;
+}
+
+.business-listing-chart-panel {
+  grid-column: 1 / -1;
+}
+
+.business-listing-chart-canvas {
+  width: 100%;
+  height: 230px;
+  margin-top: 6px;
+}
+
+.business-listing-total {
+  color: #78837c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.business-listing-chart-error {
+  display: flex;
+  min-height: 177px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #929c95;
+  font-size: 10px;
+  text-align: center;
 }
 
 .results-note {
@@ -1804,7 +1997,11 @@ p {
   }
 
   .overview-grid {
-    grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activity-card {
+    grid-column: span 2;
   }
 
   .business-grid {
@@ -1884,6 +2081,18 @@ p {
 
   .overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .business-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .business-listing-chart-panel {
+    grid-column: auto;
+  }
+
+  .activity-card {
+    grid-column: auto;
   }
 }
 
@@ -1998,6 +2207,23 @@ p {
 
   .directory-section {
     padding: 17px 13px 13px;
+  }
+
+  .business-detail-panel {
+    padding: 16px 13px;
+  }
+
+  .business-detail-profile {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .business-verification-badge {
+    margin-left: 62px;
+  }
+
+  .business-detail-list {
+    grid-template-columns: 1fr;
   }
 
   .section-heading h2 {
