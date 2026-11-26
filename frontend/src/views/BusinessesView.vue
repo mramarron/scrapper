@@ -101,13 +101,12 @@
         <!-- Actions -->
         <td class="px-4 py-3.5 text-right align-middle whitespace-nowrap">
           <div class="inline-flex items-center justify-end gap-2">
-            <button
-              type="button"
-              class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
-              @click="()=>{}"
+            <RouterLink
+              :to="{ name: 'business-details', params: { id: business.id } }"
+              class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
             >
               View
-            </button>
+            </RouterLink>
 
             <button
               type="button"

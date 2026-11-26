@@ -26,6 +26,12 @@ const router = createRouter({
       meta: { title: 'Businesses' },
     },
     {
+      path: '/businesses/:id',
+      name: 'business-details',
+      component: () => import('./views/BusinessDetailView.vue'),
+      meta: { title: 'Business details' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('./views/SettingsView.vue'),
